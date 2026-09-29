@@ -1,0 +1,287 @@
+{
+ "a01": {
+  "who": "VIPER",
+  "text": "Sentry, Viper 21, on station, angels 25.",
+  "dur": 3.19
+ },
+ "a02": {
+  "who": "SENTRY",
+  "text": "Viper 21, Sentry, radar contact. Maintain block angels 20 to 25, Bravo track.",
+  "dur": 7.63
+ },
+ "a03": {
+  "who": "GHOST",
+  "text": "Texaco 31, Ghost 11, ready for pre-contact, Charlie track.",
+  "dur": 4.26
+ },
+ "a04": {
+  "who": "TEXACO",
+  "text": "Ghost 11, Texaco 31, cleared pre-contact. Boom is ready, say fuel state.",
+  "dur": 6.35
+ },
+ "a05": {
+  "who": "HAWG",
+  "text": "Sentry, Hawg 11, target area is clear. Request battle damage assessment, over.",
+  "dur": 5.62
+ },
+ "a06": {
+  "who": "SENTRY",
+  "text": "Hawg 11, Sentry, roger, standby for BDA. Out.",
+  "dur": 4.22
+ },
+ "a07": {
+  "who": "RAIDER",
+  "text": "Sentry, Raider 41, bingo fuel. Request vector to tanker, over.",
+  "dur": 5.03
+ },
+ "a08": {
+  "who": "SENTRY",
+  "text": "Raider 41, Sentry, vector to Texaco, heading 270, 60 miles, angels 15.",
+  "dur": 7.72
+ },
+ "a09": {
+  "who": "RAIDER",
+  "text": "270, 60 miles, Raider 41. Wilco.",
+  "dur": 4.73
+ },
+ "a10": {
+  "who": "MAGIC",
+  "text": "All players, Magic, weather update. Winds 240 at 15. Visibility 10. Altimeter 3001. Out.",
+  "dur": 14.8
+ },
+ "a11": {
+  "who": "GHOST",
+  "text": "Ghost flight, comm check on Charlie Delta. Ghost 11.",
+  "dur": 3.7
+ },
+ "a12": {
+  "who": "GHOST",
+  "text": "Ghost 21.",
+  "dur": 1.55
+ },
+ "a13": {
+  "who": "VIPER",
+  "text": "Viper flight, push channel Foxtrot 4.",
+  "dur": 2.77
+ },
+ "a14": {
+  "who": "VIPER",
+  "text": "Viper 21, Foxtrot 4.",
+  "dur": 2.38
+ },
+ "a15": {
+  "who": "SENTRY",
+  "text": "Ghost 11, Sentry, picture clean. No factors, Bullseye 090 for 120.",
+  "dur": 7.05
+ },
+ "a16": {
+  "who": "GHOST",
+  "text": "Ghost 11, copy, picture clean.",
+  "dur": 2.55
+ },
+ "a17": {
+  "who": "HAWG",
+  "text": "Sentry, Hawg 11, tally 2 bandits, Bullseye 310, 40 miles, angels 20.",
+  "dur": 7.08
+ },
+ "a18": {
+  "who": "SENTRY",
+  "text": "Hawg 11, Sentry, declare.",
+  "dur": 2.32
+ },
+ "a19": {
+  "who": "HAWG",
+  "text": "Sentry, Hawg 11, friendly. IFF confirmed, Sierra 2. Continuing, out.",
+  "dur": 5.3
+ },
+ "a20": {
+  "who": "RAIDER",
+  "text": "Sentry, Raider, radio check, Alpha Charlie, over.",
+  "dur": 3.92
+ },
+ "a21": {
+  "who": "SENTRY",
+  "text": "Raider, Sentry, loud and clear, 5 by 5, over.",
+  "dur": 3.79
+ },
+ "a22": {
+  "who": "TEXACO",
+  "text": "Viper 21, Texaco, you are cleared to disconnect. Have a good 1. Out.",
+  "dur": 5.28
+ },
+ "a23": {
+  "who": "VIPER",
+  "text": "Texaco, Viper 21, roger, disconnecting. Thanks for the gas.",
+  "dur": 3.81
+ },
+ "a24": {
+  "who": "MAGIC",
+  "text": "Sentry, Magic, new track, Bullseye 310, 120 miles, hostile.",
+  "dur": 8.5
+ },
+ "a25": {
+  "who": "SENTRY",
+  "text": "Magic, Sentry, roger, assign track Tango Lima to Ghost. Out.",
+  "dur": 4.77
+ },
+ "a26": {
+  "who": "HAWG",
+  "text": "Sentry, Hawg 11, Fox 3, Fox 3! Bullseye 270, 60 miles.",
+  "dur": 6.18
+ },
+ "a27": {
+  "who": "SENTRY",
+  "text": "Hawg 11, Sentry, copy Fox 3. Splash 1 bandit. Say your state.",
+  "dur": 5.26
+ },
+ "a28": {
+  "who": "HAWG",
+  "text": "Sentry, Hawg 11, Winchester. Bingo. Egressing Kilo, out.",
+  "dur": 4.05
+ },
+ "a29": {
+  "who": "GHOST",
+  "text": "Sentry, Ghost 21, say again last transmission, you are broken and stepped on.",
+  "dur": 4.41
+ },
+ "a30": {
+  "who": "SENTRY",
+  "text": "Ghost 21, Sentry, repeat, picture clean. Over.",
+  "dur": 3.66
+ },
+ "a31": {
+  "who": "TEXACO",
+  "text": "All players, Texaco 31, tanker track Bravo is hot. Angels 20, playtime 15 minutes.",
+  "dur": 7.63
+ },
+ "a32": {
+  "who": "RAIDER",
+  "text": "Sentry, Raider 41, Oscar Mike, checking out of sector Delta. Out.",
+  "dur": 5.13
+ },
+ "start1": {
+  "who": "SENTRY",
+  "text": "Nighthawk 11, Sentry, radar contact. You are cleared as fragged, route Alpha to Bravo. Keep it quiet. Over.",
+  "dur": 8.23
+ },
+ "start2": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, I hold you on the line. Point Alpha is yours. Good hunting, out.",
+  "dur": 5.65
+ },
+ "wp1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, roger, good track. Proceed to next point, over.",
+  "dur": 4.58
+ },
+ "wp2": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, copy point. Stay low, stay quiet. Out.",
+  "dur": 4.3
+ },
+ "wp3": {
+  "who": "SENTRY",
+  "text": "Sentry copies, Nighthawk is on the money. Continue to next waypoint, out.",
+  "dur": 5.11
+ },
+ "wpc1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, clean pass. Nobody knows you were there. Continue.",
+  "dur": 4.6
+ },
+ "wpc2": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, no radar reaction at all. Beautiful. Continue, out.",
+  "dur": 5.13
+ },
+ "trk1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, Spike, Spike! SAM radar is painting you. Stay nose on.",
+  "dur": 5.82
+ },
+ "trk2": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, you are being tracked. Get out of that beam.",
+  "dur": 3.85
+ },
+ "lock1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, Mud 6, Mud 6! They have a lock. Expect a launch.",
+  "dur": 4.62
+ },
+ "lock2": {
+  "who": "MAGIC",
+  "text": "Nighthawk, Magic, Patriot radar is locked on. Break away, break away.",
+  "dur": 7.14
+ },
+ "msl1": {
+  "who": "SENTRY",
+  "text": "Missile launch, missile launch! Nighthawk, Sentry, break, break, break!",
+  "dur": 4.3
+ },
+ "msl2": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, Patriot launch. SAM in the air! Defend, defend!",
+  "dur": 4.54
+ },
+ "msl3": {
+  "who": "NIGHTHAWK",
+  "text": "Mud 6, Mud 6! Nighthawk 11, defending, flares, flares!",
+  "dur": 3.64
+ },
+ "msl4": {
+  "who": "MAGIC",
+  "text": "Nighthawk, Magic, missile in flight. Beam it and dispense!",
+  "dur": 5.01
+ },
+ "ok1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, missile lost lock. Good defense.",
+  "dur": 3.56
+ },
+ "ok2": {
+  "who": "SENTRY",
+  "text": "Splash 1 SAM. Nice flying, Nighthawk.",
+  "dur": 3.47
+ },
+ "ok3": {
+  "who": "NIGHTHAWK",
+  "text": "Nighthawk 11, missile defeated. Continuing.",
+  "dur": 3.04
+ },
+ "dec1": {
+  "who": "SENTRY",
+  "text": "Missile took the decoy. Nice work, Nighthawk. Sentry out.",
+  "dur": 3.92
+ },
+ "stall1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, check your airspeed, you are getting slow. Over.",
+  "dur": 4.05
+ },
+ "low1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, countermeasures low. Conserve your flares, you are close to Winchester.",
+  "dur": 5.73
+ },
+ "dead1": {
+  "who": "SENTRY",
+  "text": "Nighthawk 11, Sentry, radio check. Nighthawk, respond, over.",
+  "dur": 5.26
+ },
+ "dead2": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, no contact. Nighthawk, how do you read? Over.",
+  "dur": 4.75
+ },
+ "crash1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, I have lost you on radar. Nighthawk, respond.",
+  "dur": 4.9
+ },
+ "night1": {
+  "who": "SENTRY",
+  "text": "Nighthawk, Sentry, night vision goggles are approved. Stay safe, over.",
+  "dur": 4.98
+ }
+}

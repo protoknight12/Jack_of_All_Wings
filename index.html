@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>F-117 Stealth Run</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Amarillo USAF (amarurgt.ttf). It lacks some punctuation (: + % , ( ) /), which falls back to the next font in the stack. */
+  @font-face { font-family: 'AmarilloUSAF'; src: url('assets/ui/fonts/amarurgt.ttf') format('truetype'); }
+  :root { --score-font: 'AmarilloUSAF', 'Arial Narrow', Impact, sans-serif; --hud: #7dffb0; --amber: #ffb020; --red: #ff3b30; --cyan: #39d0ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #dfe9e2; font: 14px ui-monospace, Consolas, monospace; user-select: none; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #score { position: fixed; top: 16px; left: 22px; font-family: var(--score-font); color: #f4f7ee; text-shadow: 0 2px 0 #0a1a2a, 0 0 12px rgba(0,0,0,.6); letter-spacing: 3px; line-height: 1; }
+  #score .lbl { font-size: 15px; letter-spacing: 6px; opacity: .85; }
+  #score #score-val { display: block; font-size: 58px; margin-top: 4px; }
+  #score .sub { font-size: 15px; letter-spacing: 3px; margin-top: 8px; opacity: .85; }
+
+  #mfd { position: fixed; top: 16px; right: 16px; border-radius: 8px; box-shadow: 0 0 0 2px #050a07, 0 6px 24px rgba(0,0,0,.55); }
+
+  #cap { position: fixed; left: 22px; bottom: 26px; max-width: 440px; font-size: 14px; line-height: 1.35; color: #58ff9a; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.8); background: rgba(4,14,10,.55); border-left: 3px solid #58ff9a; padding: 6px 10px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #cap b { color: #ffd23a; letter-spacing: 1px; margin-right: 6px; }
+  .opts { margin: 10px 0 4px; display: flex; gap: 10px; align-items: center; justify-content: center; } .opts .lbl { letter-spacing: 3px; font-size: 12px; opacity: .8; margin-right: 6px; }
+  .opt { font: inherit; letter-spacing: 3px; padding: 8px 18px; background: rgba(4,14,10,.7); color: #9fb3a8; border: 1px solid rgba(125,255,176,.35); cursor: pointer; } .opt:hover { color: #fff; } .opt.sel { color: #0a120c; background: #58ff9a; border-color: #58ff9a; }
+  #hudc { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+  #mfd { border-radius: 2px !important; border: 3px solid #1a1e1c; box-shadow: 0 0 0 2px #050807, inset 0 0 20px rgba(0,0,0,.6), 0 6px 24px rgba(0,0,0,.55) !important; }
+  #seeker, .toast, #wpt svg { border-radius: 2px !important; }
+  #hud { position: fixed; left: 22px; bottom: 22px; display: flex; gap: 16px; align-items: flex-end; background: rgba(4,14,10,.6); border: 1px solid rgba(125,255,176,.35); border-radius: 8px; padding: 12px 16px; color: var(--hud); }
+  #thr { width: 26px; height: 110px; border: 1.5px solid var(--hud); position: relative; }
+  #thr-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--hud); opacity: .8; height: 35%; }
+  #thr-lbl { text-align: center; font-size: 11px; margin-top: 4px; }
+  #gauges { display: grid; grid-template-columns: auto auto; gap: 4px 12px; font-size: 13px; }
+  #gauges span.k { opacity: .7; } #gauges span.v { text-align: right; font-size: 18px; min-width: 60px; }
+  .bad { color: var(--red); }
+
+  #warn { position: fixed; top: 22%; left: 0; right: 0; text-align: center; pointer-events: none; font-family: var(--score-font); font-size: 30px; letter-spacing: 4px; text-shadow: 0 2px 6px #000; }
+  #warn .red { color: var(--red); } #warn .amber { color: var(--amber); }
+  .blink { animation: blink .5s steps(2, jump-none) infinite; }
+  @keyframes blink { 0% { opacity: 1; } 50% { opacity: .15; } }
+  #seeker { display: none; position: fixed; top: calc(22% + 92px); left: 50%; transform: translateX(-50%); text-align: center; font-size: 14px; letter-spacing: 2px; color: var(--red); background: rgba(4,14,10,.55); padding: 6px 14px; border-radius: 6px; }
+  #seeker.notch { color: var(--cyan); } #seeker.good { color: #9dffb8; } #seeker.warn { color: var(--amber); } #seeker.dim { color: #9fb3a8; }
+  #sk-bar { width: 260px; height: 9px; border: 1px solid currentColor; margin: 5px auto 4px; } #sk-fill { height: 100%; background: currentColor; width: 0; }
+  #sk-line { font-size: 12px; letter-spacing: 1px; opacity: .9; }
+  #wpt { position: fixed; top: 158px; left: 22px; display: flex; align-items: center; gap: 12px; color: #ffd23a; text-shadow: 0 2px 4px #000; }
+  #wpt svg { width: 46px; height: 46px; background: rgba(4,14,10,.55); border: 1px solid rgba(255,210,58,.6); border-radius: 50%; }
+  #wpt-arrow { transform-origin: 50% 50%; } #wpt-txt { font-size: 24px; letter-spacing: 2px; } #wpt-sub { font-size: 12px; letter-spacing: 2px; opacity: .85; }
+  #flare-box { grid-column: 1 / -1; margin-top: 6px; border-top: 1px solid rgba(125,255,176,.3); padding-top: 6px; display: flex; align-items: center; gap: 10px; }
+  #flare-box .n { font-size: 30px; line-height: 1; min-width: 46px; text-align: right; } #flare-box .k { font-size: 12px; opacity: .8; letter-spacing: 2px; }
+  #flare-track { flex: 1; min-width: 70px; height: 10px; border: 1px solid currentColor; } #flare-bar { height: 100%; background: currentColor; width: 100%; }
+
+  #toasts { position: fixed; top: 42%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  .toast { font-size: 18px; letter-spacing: 2px; padding: 6px 16px; background: rgba(4,14,10,.7); border: 1px solid var(--hud); color: var(--hud); border-radius: 4px; animation: fade 2.6s forwards; }
+  .toast.bad { color: var(--red); border-color: var(--red); } .toast.good { color: #9dffb8; }
+  @keyframes fade { 0%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-14px); } }
+
+  #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(2,8,6,.78); text-align: center; padding: 20px; }
+  #ov-title { font-family: var(--score-font); font-size: 54px; letter-spacing: 8px; margin: 0 0 12px; color: #f4f7ee; }
+  #ov-body { max-width: 560px; line-height: 1.55; color: #cfe0d6; } #ov-body b { color: #fff; } .hint { opacity: .8; font-size: 13px; }
+  table.keys { margin: 12px auto; border-collapse: collapse; text-align: left; } table.keys td { padding: 3px 12px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="score">
+  <div class="lbl">SCORE</div>
+  <span id="score-val">000000</span>
+  <div class="sub">WAYPOINTS <span id="passed-val">0</span></div>
+</div>
+<div id="wpt">
+  <svg viewBox="-23 -23 46 46"><g id="wpt-arrow"><path d="M0 -17 L9 10 L0 5 L-9 10 Z" fill="#ffd23a" stroke="#3a2a00" stroke-width="1.5"/></g></svg>
+  <div><div id="wpt-txt">--</div><div id="wpt-sub">WPT 1</div></div>
+</div>
+
+<canvas id="mfd"></canvas>
+
+<div id="warn"></div>
+<div id="seeker"><div id="sk-title">SEEKER</div><div id="sk-bar"><div id="sk-fill"></div></div><div id="sk-line"></div></div>
+<div id="toasts"></div>
+<div id="cap"></div>
+
+<canvas id="hudc"></canvas>
+<div id="hud" style="display:none">
+  <div><div id="thr"><div id="thr-fill"></div></div><div id="thr-lbl">THR <span id="thr-val">35%</span></div></div>
+  <div id="gauges">
+    <span class="k">SPD KT</span><span class="v" id="spd">0</span>
+    <span class="k">ALT</span><span class="v" id="alt">0</span>
+    <div id="flare-box"><span class="k">FLARES</span><span class="n" id="flares">0</span><div id="flare-track"><div id="flare-bar"></div></div></div>
+  </div>
+</div>
+
+<div id="overlay"><h1 id="ov-title">LOADING</h1><div id="ov-body"></div></div>
+<script type="module" src="src/game/main.js"></script>
+</body>
+</html>

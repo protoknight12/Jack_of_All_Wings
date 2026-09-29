@@ -1,0 +1,21 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: SCORE
+    - generic [ref=e5]: "000000"
+    - generic [ref=e6]: WAYPOINTS 0
+  - generic [ref=e11]:
+    - generic [ref=e12]: "--"
+    - generic [ref=e13]: WPT 1
+  - generic [ref=e15]:
+    - generic [ref=e16]: THR 35%
+    - generic [ref=e20]:
+      - generic [ref=e21]: SPD KT
+      - generic [ref=e22]: "0"
+      - generic [ref=e23]: ALT
+      - generic [ref=e24]: "0"
+      - generic [ref=e25]:
+        - generic [ref=e26]: FLARES
+        - generic [ref=e27]: "0"
+  - generic [ref=e30]:
+    - heading "LOADING" [level=1] [ref=e31]
+    - generic [ref=e32]: Loading model…
