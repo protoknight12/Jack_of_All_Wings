@@ -76,7 +76,7 @@ export class Site {
   setLOD(d) { const near = d < CFG.SITE_LOD_R; this.hi.visible = near; this.lo.visible = !near; }
 
   // returns 'fire' when the site launches at the player this frame
-  update(dt, player) {
+  update(dt, player, seen = false) {                            // seen: a detectable contrail is in view
     const d0 = this.desc;
     this.flash = Math.max(0, this.flash - dt);
     this.blink += dt; if (this.radar) {
@@ -92,11 +92,11 @@ export class Site {
     // aspect-dependent detection range: nose/tail-on is stealthiest, broadside is not
     const lx = -dx / (d || 1), lz = -dz / (d || 1);                 // from player toward the radar
     const sinA = Math.abs(player.fx * lz - player.fz * lx);         // 0 = nose/tail-on, 1 = broadside
-    const target = this.range * (CFG.RCS_NOSE_FACTOR + (1 - CFG.RCS_NOSE_FACTOR) * sinA);
+    const target = this.range * (CFG.RCS_NOSE_FACTOR + (1 - CFG.RCS_NOSE_FACTOR) * sinA) * (player.rcsMult || 1);
     this.effRange += (target - this.effRange) * Math.min(1, dt * 4);
 
     let fire = null;
-    if (player.alive && d < this.effRange) this.lock = Math.min(1, this.lock + dt / CFG.LOCK_TIME);
+    if (player.alive && (d < this.effRange || seen)) this.lock = Math.min(1, this.lock + dt / CFG.LOCK_TIME);
     else this.lock = Math.max(0, this.lock - CFG.LOCK_DECAY * dt);
     if (this.lock >= 1 && this.cooldown <= 0 && d0.ammo > 0 && player.alive) {
       this.cooldown = CFG.FIRE_COOLDOWN; d0.ammo--; this.flash = 0.5;

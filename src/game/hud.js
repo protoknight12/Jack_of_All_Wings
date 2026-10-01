@@ -1,5 +1,6 @@
-// DOM HUD (score, waypoint arrow, throttle/speed/alt/flares, seeker feedback, warnings, toasts) .
+// DOM HUD (score, waypoint / target arrow, throttle/speed/alt/flares, seeker feedback, warnings, toasts) .
 import { CFG } from './config.js';
+import { U, font, tint, phosphor } from './ui.js';
 const $ = (id) => document.getElementById(id);
 
 export class HUD {
@@ -8,7 +9,7 @@ export class HUD {
       sk: $('seeker'), skTitle: $('sk-title'), skFill: $('sk-fill'), skLine: $('sk-line'), wptArrow: $('wpt-arrow'), wptTxt: $('wpt-txt'), wptSub: $('wpt-sub'),
       warn: $('warn'), toasts: $('toasts'), overlay: $('overlay'), ovTitle: $('ov-title'), ovBody: $('ov-body'), };
     this.warnKey = '';
-    this.cv = $('hudc'); this.g = this.cv.getContext('2d'); this.hudOn = false;
+    this.cv = $('hudc'); this.g = this.cv.getContext('2d'); phosphor(this.g); this.hudOn = false;
     const fit = () => { const d = 1; this.cv.width = innerWidth * d; this.cv.height = innerHeight * d; this.dpr = d; };
     addEventListener('resize', fit); fit();
   }
@@ -24,10 +25,10 @@ export class HUD {
   drawHUD(p, time, flags) {
     this._hf = (this._hf || 0) + 1; if (this._hf & 1) return;          // redraw at half frame rate: it is a big full-screen canvas
     const c = this.g, W = this.cv.width / this.dpr, H = this.cv.height / this.dpr, cx = W / 2, cy = H / 2;
-    const G = '#58ff9a', A = '#ffb020', R = '#ff4a3d';
+    const G = U.green, A = U.amber, R = U.red, dim = tint(U.green, U.dimA);
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); c.clearRect(0, 0, W, H);
-    c.font = '13px ui-monospace, Consolas, monospace'; c.lineWidth = 1.4;
-    const blink = Math.floor(time * 4) % 2 === 0, txt = (t, x, y, col = G, al = 'center', f) => { c.fillStyle = col; c.textAlign = al; if (f) c.font = f; c.fillText(t, x, y); if (f) c.font = '13px ui-monospace, Consolas, monospace'; };
+    c.font = font('m'); c.lineWidth = U.line.thin; c.shadowBlur = U.glow;
+    const blink = Math.floor(time * 4) % 2 === 0, txt = (t, x, y, col = G, al = 'center', f) => { c.fillStyle = col; c.textAlign = al; if (f) c.font = f; c.fillText(t, x, y); if (f) c.font = font('m'); };
     const line = (x1, y1, x2, y2, col = G) => { c.strokeStyle = col; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
 
     // ---- heading tape
@@ -40,7 +41,7 @@ export class HUD {
     }
     c.restore(); line(cx - tw / 2, ty + 12, cx + tw / 2, ty + 12);
     c.beginPath(); c.moveTo(cx, ty + 14); c.lineTo(cx - 6, ty + 24); c.lineTo(cx + 6, ty + 24); c.closePath(); c.stroke();
-    c.strokeRect(cx - 24, ty + 26, 48, 20); txt(String(Math.round(hdg) % 360).padStart(3, '0'), cx, ty + 41, G, 'center', '16px ui-monospace, Consolas, monospace');
+    c.strokeRect(cx - 24, ty + 26, 48, 20); txt(String(Math.round(hdg) % 360).padStart(3, '0'), cx, ty + 41, G, 'center', font('l'));
 
     // ---- generic vertical tape
     const tape = (x, side, val, per, unit, label, marks) => {
@@ -56,7 +57,7 @@ export class HUD {
       c.restore(); line(x, top, x, top + h);
       // readout box
       const bx = side === 'l' ? x + 6 : x - 66; c.strokeStyle = G; c.strokeRect(bx, cy - 11, 60, 22);
-      txt(String(Math.round(val)), bx + 30, cy + 6, G, 'center', '16px ui-monospace, Consolas, monospace'); txt(label, x, top - 8, G, 'center');
+      txt(String(Math.round(val)), bx + 30, cy + 6, G, 'center', font('l')); txt(label, x, top - 8, G, 'center');
     };
     const kt = p.kt, ft = Math.max(0, p.y * 3.281), aglFt = Math.max(0, p.agl * 3.281);
     tape(cx - 250, 'l', kt, 1.5, 10, 'CAS KT', [{ v: CFG.V_STALL * 4, col: R }, { v: (CFG.V_STALL + 11) * 4, col: A }]);
@@ -70,12 +71,49 @@ export class HUD {
     // ---- bottom line: countermeasures + master status
     const by = H - 34, low = p.flares <= 8;
     c.strokeStyle = low ? R : G; c.strokeRect(cx - 150, by - 20, 300, 34);
-    txt('CMD FLR/CHF', cx - 92, by + 2, low ? R : G, 'center'); txt(String(p.flares).padStart(2, '0'), cx + 10, by + 4, low && blink ? A : (low ? R : G), 'center', '22px ui-monospace, Consolas, monospace');
+    txt('CMD FLR/CHF', cx - 92, by + 2, low ? R : G, 'center'); txt(String(p.flares).padStart(2, '0'), cx + 10, by + 4, low && blink ? A : (low ? R : G), 'center', font('xl'));
     c.strokeStyle = low ? R : G; c.strokeRect(cx + 50, by - 8, 88, 10); c.fillStyle = low ? R : G; c.fillRect(cx + 50, by - 8, 88 * p.flares / CFG.FLARES_MAX, 10);
+    c.strokeStyle = flags.bombs ? G : R; c.strokeRect(cx - 262, by - 20, 104, 34);
+    txt(flags.wpn, cx - 210, by - 5, flags.bombs ? G : R, 'center'); txt('BOMBS ' + flags.bombs, cx - 210, by + 10, flags.bombs ? G : R, 'center');
     if (flags.nvg) { c.strokeStyle = G; c.strokeRect(cx + 156, by - 20, 48, 34); txt('NVG', cx + 180, by + 3, G, 'center'); }
     // stealth state annunciators
-    const ann = [['RADAR', flags.track, A], ['LOCK', flags.lock, R], ['MSL', flags.msl, R], ['STALL', p.stalled, R]];
-    ann.forEach(([t, on, col], i) => { const x = cx - 150 + i * 76; if (on && blink) { c.fillStyle = col; c.fillRect(x, by - 58, 70, 18); txt(t, x + 35, by - 45, '#0a120c', 'center'); } else { c.strokeStyle = on ? col : 'rgba(88,255,154,.35)'; c.strokeRect(x, by - 58, 70, 18); txt(t, x + 35, by - 45, on ? col : 'rgba(88,255,154,.35)', 'center'); } });
+    const ann = [['RADAR', flags.track, A], ['LOCK', flags.lock, R], ['MSL', flags.msl, R], ['STALL', p.stalled, R], ['BAY', flags.bay, A]];
+    ann.forEach(([t, on, col], i) => { const x = cx - 150 + i * 76; if (on && blink) { c.fillStyle = col; c.fillRect(x, by - 58, 70, 18); txt(t, x + 35, by - 45, U.ink, 'center'); } else { c.strokeStyle = on ? col : dim; c.strokeRect(x, by - 58, 70, 18); txt(t, x + 35, by - 45, on ? col : dim, 'center'); } });
+
+    // ---- designated target marker (flags.mark): box + diamond on the target, or a caret at the screen edge pointing at it
+    const S = flags.sight, mk = flags.mark, km = (d) => (d >= 1000 ? (d / 1000).toFixed(2) + ' km' : Math.round(d) + ' m');
+    if (mk) {
+      const col = S && S.armed ? (S.inRange ? G : A) : dim;
+      c.strokeStyle = col;
+      if (mk.on) {
+        c.strokeRect(mk.x - 14, mk.y - 14, 28, 28);
+        c.beginPath(); c.moveTo(mk.x, mk.y - 6); c.lineTo(mk.x + 6, mk.y); c.lineTo(mk.x, mk.y + 6); c.lineTo(mk.x - 6, mk.y); c.closePath(); c.stroke();
+        txt(mk.label, mk.x, mk.y - 20, col, 'center');
+      } else {
+        const ex = Math.min(W - 40, Math.max(40, mk.x)), ey = Math.min(H - 120, Math.max(90, mk.y));
+        c.save(); c.translate(ex, ey); c.rotate(Math.atan2(mk.x - cx, -(mk.y - cy)));
+        c.beginPath(); c.moveTo(0, -12); c.lineTo(9, 4); c.lineTo(-9, 4); c.closePath(); c.stroke(); c.restore();
+        txt(`${mk.label} ${km(mk.dist)}`, ex, ey + 22, col, 'center');
+      }
+    }
+
+    // ---- bombing reticle (flags.sight, from weapons.solution): flight-path marker fixed just ahead of the jet, steering line offset by the
+    // cross-track miss (turn toward it), release cue sliding down it with time to release; release when the cue meets the marker.
+    // Doors shut: dimmed steering line only. Out of the guidance envelope: amber. Past the release point: cue below the marker, red, flashing.
+    if (S) {
+      const fx0 = cx, fy0 = cy - CFG.RETICLE_FPM_UP, cueH = Math.min(CFG.RETICLE_CUE_PX, H * 0.2);
+      const sx = fx0 + Math.max(-220, Math.min(220, S.cross * CFG.RETICLE_PX_PER_M)), steerOk = Math.abs(S.cross) <= S.lim.cross;
+      const passed = S.tRel < 0, col = !S.armed ? dim : S.inRange ? G : A;
+      c.strokeStyle = S.armed ? G : dim; c.beginPath(); c.arc(fx0, fy0, 7, 0, 7); c.stroke();
+      line(fx0 - 22, fy0, fx0 - 7, fy0, S.armed ? G : dim); line(fx0 + 7, fy0, fx0 + 22, fy0, S.armed ? G : dim); line(fx0, fy0 - 7, fx0, fy0 - 14, S.armed ? G : dim);
+      line(sx, fy0 - cueH - 14, sx, fy0 + 36, !S.armed ? dim : steerOk ? G : A);
+      const head = `${CFG.TARGET_TYPES[S.type].label}  ${km(S.dist)}`;
+      if (S.armed) {
+        const yc = fy0 - Math.max(-0.25, Math.min(1, S.tRel / CFG.RETICLE_CUE_TIME)) * cueH;
+        if (!passed || blink) { c.lineWidth = U.line.heavy; line(sx - 26, yc, sx + 26, yc, passed ? R : col); c.lineWidth = U.line.thin; }
+        txt(`${head}   REL ${passed ? 'PASSED' : S.tRel.toFixed(1) + ' s'}   ${S.inRange ? 'IN RNG' : 'OUT OF RNG'}${S.auto ? '   AUTO REL' : ''}`, fx0, fy0 - cueH - 26, passed ? R : col, 'center');
+      } else txt(`${head}   BAY SHUT`, fx0, fy0 - cueH - 26, dim, 'center');
+    }
   }
   score(s, passed) { this.el.score.textContent = String(s).padStart(6, '0'); this.el.passed.textContent = passed; }
   gauges(p) {
@@ -89,11 +127,11 @@ export class HUD {
     this.el.flareBar.style.width = (p.flares / CFG.FLARES_MAX * 100).toFixed(0) + '%';
     this.el.flareBox.className = p.flares <= 8 ? 'bad' : '';
   }
-  // waypoint arrow (rel = bearing to the waypoint relative to the nose, rad), distance readout
-  wpt(rel, dist, n, undetected) {
+  // objective arrow (rel = bearing to the waypoint / target relative to the nose, rad), distance readout, label
+  wpt(rel, dist, label, undetected) {
     this.el.wptArrow.style.transform = `rotate(${(rel * 180 / Math.PI).toFixed(1)}deg)`;
     this.el.wptTxt.textContent = dist >= 1000 ? (dist / 1000).toFixed(2) + ' km' : Math.round(dist) + ' m';
-    this.el.wptSub.textContent = `WPT ${n}${undetected ? '  ·  UNDETECTED +' + CFG.SCORE_UNDETECTED : ''}`;
+    this.el.wptSub.textContent = `${label}${undetected ? '  ·  UNDETECTED +' + CFG.SCORE_UNDETECTED : ''}`;
   }
   // seeker feedback for the most dangerous missile (undefined = hide)
   seeker(m) {

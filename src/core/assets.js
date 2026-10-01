@@ -41,6 +41,15 @@ export const MODELS = {
     file: 'model/pac-3-mse.glb',   // already in meters (5.2 m long), nose toward +X
     scale: 1,
   },
+  'gbu-27': {
+    label: 'GBU-27 Paveway III',
+    dir: 'weapons/gbu-27/',
+    type: 'obj',
+    file: 'model/us_2000lb_gbu_27.obj',
+    mtl: 'model/us_2000lb_gbu_27.mtl',   // only used for material names
+    scale: 1,                            // already in meters (4.2 m long)
+    diffuse: { '6adac757-ed70-43d4-bc2e-91bd69af70dc': 'model/textures/us_2000lb_gbu_27_c.jpg' },
+  },
 };
 
 const PBR_MAPS = {

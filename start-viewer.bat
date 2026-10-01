@@ -1,4 +1,7 @@
 @echo off
 cd /d "%~dp0"
-start "" http://localhost:8000/viewer/
-python -m http.server 8000
+title Jack of All Wings server
+set PY=python
+where python >nul 2>nul || set PY=py
+%PY% server.py 8000 /viewer/
+if errorlevel 1 pause

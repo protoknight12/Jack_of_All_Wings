@@ -4,12 +4,14 @@ A pilot who can fly anything: stealth strike, fighters, bombers, interceptors, A
 
 ```
 plane combat game/
-├── index.html              the game (Jack of All Wings; mission: F-117 Stealth Run)
-├── start-game.bat         double-click: starts local server + opens the game
+├── index.html              mission select (Jack of All Wings): list, holo map, saved rank / scores / times per mission
+├── f117.html               the F-117 Stealth Run game (briefing screen, then the mission; Esc on menu/end screens = back to mission select)
+├── start-game.bat         double-click: starts the local server + opens the mission select
+├── start-viewer.bat       double-click: same server, opens the viewer (just opens the page if the server is already running)
+├── server.py              local no-cache static server (`python server.py [port] [page]`)
 ├── viewer/                 standalone 3D model viewer
 │   └── index.html
 ├── vendor/three/          Three.js (local copy, no CDN/build step)
-├── start-viewer.bat       double-click: starts local server + opens viewer
 ├── src/
 │   ├── core/               shared engine code: renderer, camera, input, asset loading
 │   ├── viewer/             viewer-only code
@@ -34,11 +36,17 @@ Rules
 - Aircraft folder names: lowercase-with-dashes (`f-117-nighthawk`, `sr-71-blackbird`).
 - Original downloads go in `source/` and are never edited; work from `model/`.
 - Code never lives in `assets/`; assets never live in `src/`.
-- Run locally by double-clicking `start-viewer.bat` (needs Python), or `python -m http.server 8000` from this folder and open http://localhost:8000/viewer/ (browsers block file:// asset loading).
-- To add a model: drop it in `assets/<category>/<name>/` and add an entry to `MODELS` in `src/core/assets.js`; it then shows up in the viewer dropdown (`viewer/?model=<name>` opens one directly).
+- Run locally by double-clicking `start-game.bat` / `start-viewer.bat` (needs Python), or `python server.py` from this folder and open http://localhost:8000/ (game) or http://localhost:8000/viewer/ (viewer). Browsers block file:// module/asset loading.
+- To add a model: drop it in `assets/<category>/<name>/` and add an entry to `MODELS` in `src/core/assets.js`; it then shows up in the viewer dropdown, grouped by category (`viewer/?model=<name>` opens one directly).
 
 ## Mission 1: F-117 Stealth Run
-Controls: A/D or arrows = turn, W/S or up/down = throttle, **Space/F = flares + chaff (hold to keep dropping, ~3.6 bursts/s; 40 to start)**, Q/E = MFD range, P = pause, R = restart, M = mute.
+Controls: A/D or arrows = turn, W/S or up/down = throttle, **Space/F = flares + chaff (hold to keep dropping, ~3.6 bursts/s; 40 to start)**, **B = bomb bay doors, G = release, Tab = next target**, Q/E = MFD range, P = pause, R = restart, M = mute.
+
+**Bombing (GBU-27).** Two in the internal bay (+1 per cleared leg). B opens/closes the doors (~1 s; SAM detection range +40% while not fully shut), G drops a bomb once they are fully open (tap = now, hold = automatic release when the cues meet), Tab picks the designated target (default: nearest). The bomb falls from the jet's ALT (ALT 600 = 600 m, `ALT_TRUE_M`) with its speed and vertical rate, under gravity and drag (mass, diameter, Cd-vs-Mach table, standard atmosphere, `WIND` hook = 0); on screen that fall is squeezed into the jet's low visual height. The laser steers it toward the designated target with limited fin authority (fixes roughly 100 m long/short or 55 m sideways) as long as the target stays within 120 deg of the jet's nose (3D) and the jet is alive; otherwise it falls ballistic. `src/game/ballistics.js` is the one flight model used by both the bomb and every impact prediction. Effects per target class (`WEAPONS.*.effects`): bunker (hard) killed within 6 m / damaged within 15 m, tank (armor) 12 / 25 m, radar (soft) 30 / 45 m; a damaged target dies to a second hit inside its damage radius.
+
+**Bombing reticle (HUD).** With a target designated: a box on the target (or an edge caret + distance when it is off-screen), and above the jet a flight-path marker, a steering line and a release cue. Steer so the line runs through the marker; the cue slides down it as the release point approaches and meets the marker at release. Doors shut = dimmed steering line only. Readout: target, distance, seconds to release, IN RNG (a release now would be steered onto the target: envelope from the weapon's fin authority and fall time) / OUT OF RNG / PASSED. Everything comes from `weapons.solution()` = the shared `predictImpact()`; no fixed distances. The MFD shows the predicted impact point with a dashed line from the jet, and a box around the designated target.
+
+**Mission end + results.** Clear `MISSION_LEGS` (5) target legs = MISSION COMPLETE: rank (S-D from score + time bonus under par, `RANKS` in config), score and time are saved to `localStorage['jow:stats:f117']` (`{rank, scores[3], times[3]}`), which the mission select shows. Getting shot down saves the score only. The hook is `missionComplete()` in `src/game/main.js`, called from `nextLeg()`.
 
 **Objective.** Fly the waypoint course. The active waypoint is a gold beacon in the 3D view, a gold crosshair ring on the MFD (edge arrow when off-scope) and an arrow + distance readout under the score. Reaching it scores `100 + 25 x (n-1)`, plus **+100 if no radar tracked you during the leg**, and refunds 2 flares. Then the next waypoint appears further along.
 

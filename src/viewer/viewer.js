@@ -96,8 +96,15 @@ function applyToggles() {
 for (const id of ['wire', 'plain', 'grid', 'axes', 'spin']) $(id).addEventListener('change', applyToggles);
 $('reset').addEventListener('click', frame);
 
+// every entry in MODELS shows up here automatically, grouped by its assets/<category>/ folder
 const sel = $('aircraft');
-for (const [id, c] of Object.entries(MODELS)) sel.add(new Option(c.label, id));
+const GROUPS = { aircraft: 'Aircraft', ground: 'Ground vehicles & sites', weapons: 'Weapons' };
+const groups = {};
+for (const [id, c] of Object.entries(MODELS)) {
+  const cat = c.dir.split('/')[0];
+  if (!groups[cat]) { groups[cat] = document.createElement('optgroup'); groups[cat].label = GROUPS[cat] || cat[0].toUpperCase() + cat.slice(1); sel.appendChild(groups[cat]); }
+  groups[cat].appendChild(new Option(c.label, id));
+}
 const wanted = new URLSearchParams(location.search).get('model');
 if (wanted && MODELS[wanted]) sel.value = wanted;
 sel.addEventListener('change', () => show(sel.value));

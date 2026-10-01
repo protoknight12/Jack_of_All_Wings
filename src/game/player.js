@@ -45,11 +45,11 @@ export class Player {
     this.stalled = false; this.stallTime = 0;
     this.alive = true;
     this.root.visible = true; this.shadow.visible = true;
-    this.flares = CFG.FLARES_START; this.flareCd = 0;
+    this.flares = CFG.FLARES_START; this.flareCd = 0; this.rcsMult = 1;     // rcsMult: radar signature (bomb bay doors open > 1)
     this.omega = 0;
     this.t = 0;
     this.gy = terrainH(this.x, this.z);
-    this.yS = this.gy + this.aglBase; this.climb = 0;
+    this.yS = this.gy + this.aglBase; this.climb = 0; this.vyPath = 0; this.vy = 0;   // vy: vertical speed of the flight path (m/s, + = up)
   }
 
   get fx() { return Math.sin(this.heading); }
@@ -57,6 +57,7 @@ export class Player {
   get aglBase() { return CFG.AGL_MIN + CFG.AGL_RANGE * clamp(this.alt / CFG.ALT_START, 0, 1); }
   get y() { return this.yS; }              // smoothed, terrain-following height above sea datum
   get agl() { return this.yS - this.gy; }
+  get trueAGL() { return this.alt * CFG.ALT_TRUE_M; }   // true height above the ground (bombs fall from here)
   get kt() { return Math.round(this.v * 4); }
 
   omegaMax() {
@@ -93,9 +94,11 @@ export class Player {
     this.gy = terrainH(this.x, this.z);
     this.followTerrain(dt);
 
+    const alt0 = this.alt;
     if (this.stalled) this.alt -= CFG.STALL_SINK * dt;
     else if (this.throttle > 0.45) this.alt = Math.min(CFG.ALT_START, this.alt + CFG.ALT_RECOVER * dt);
     if (this.alt <= 0) { this.alt = 0; this.alive = false; ev.onCrash && ev.onCrash(); }
+    this.vy = this.vyPath + (this.alt - alt0) / Math.max(dt, 1e-4) * CFG.ALT_TRUE_M;
 
     // visuals
     this.roll += (clamp(this.turnCmd * 0.95, -1, 1) - this.roll) * Math.min(1, dt * 5);
@@ -113,7 +116,7 @@ export class Player {
     const target = Math.max(this.gy + this.aglBase, ahead + CFG.TERRAIN_CLEARANCE);
     const up = v * Math.tan(CFG.CLIMB_MAX), down = v * Math.tan(CFG.DIVE_MAX);
     const dy = clamp((target - this.yS) * Math.min(1, dt * CFG.FOLLOW_RATE), -down * dt, up * dt);
-    this.yS += dy;
+    this.yS += dy; this.vyPath = dy / Math.max(dt, 1e-4);
     if (this.yS < this.gy + CFG.TERRAIN_FLOOR) this.yS = this.gy + CFG.TERRAIN_FLOOR;     // hard floor: never clip the ground
     this.climb += (Math.atan2(dy / Math.max(dt, 1e-4), v) - this.climb) * Math.min(1, dt * 6);
     this.turb = clamp(1 - this.agl / 90, 0, 1) * CFG.TURB_ROLL;

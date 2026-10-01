@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Aircraft Viewer</title>
+<title>Model Viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   html, body { margin: 0; height: 100%; background: #14181f; overflow: hidden; font: 14px system-ui, sans-serif; color: #dfe5ee; }
@@ -14,8 +14,13 @@
   #status { position: fixed; inset: auto 0 40% 0; text-align: center; font-size: 16px; }
   #help { position: fixed; bottom: 12px; left: 12px; color: #8b95a5; font-size: 12px; }
 </style>
-<script type="importmap">
-{ "imports": { "three": "../vendor/three/three.module.min.js" } }
+<script>
+  // Cache-buster (same as the game): every load fetches the viewer's own modules with a fresh ?v= stamp, so an edited
+  // model list (src/core/assets.js) is never replaced by a stale cached copy. A NEW module under src/ must be added to this list.
+  window.__v = Date.now();
+  const base = new URL('../', location.href).href, imports = { three: base + 'vendor/three/three.module.min.js' };
+  for (const f of ['core/assets', 'viewer/viewer']) imports[`${base}src/${f}.js`] = `${base}src/${f}.js?v=${window.__v}`;
+  const map = document.createElement('script'); map.type = 'importmap'; map.textContent = JSON.stringify({ imports }); document.head.appendChild(map);
 </script>
 </head>
 <body>
@@ -31,6 +36,6 @@
 </div>
 <div id="status">Loading…</div>
 <div id="help">Drag: rotate · Right-drag: pan · Wheel: zoom</div>
-<script type="module" src="../src/viewer/viewer.js"></script>
+<script type="module">import(`../src/viewer/viewer.js?v=${window.__v}`);</script>
 </body>
 </html>

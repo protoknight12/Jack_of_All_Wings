@@ -161,23 +161,16 @@ export class Particles {
     this.burn(x, y + 3, z, 1.5, 22, 'smoke', 1.2);
   }
 
-  // missile motor: bright flame + halo + dense white smoke; nothing at all when coasting (caller skips)
-  missileBurn(x, y, z, fx, fz, step) {
-    const n = Math.min(4, Math.max(1, Math.ceil(step / 5)));
-    for (let k = 0; k < n; k++) {
-      const b = 7 + k * (step / n), px = x - fx * b, pz = z - fz * b;
-      this.emit({ pos: [px, y, pz], vel: [-fx * 8, 0, -fz * 8], life: rr(2.6, 3.4), size: 6, grow: 3, color: [0.95, 0.95, 0.96], end: [0.62, 0.62, 0.65], opa: 0.6, drag: 0.5, rise: 1 });
-    }
+  // missile motor: bright flame + halo (the smoke is a ribbon trail, see trails.js); nothing at all when coasting (caller skips)
+  missileBurn(x, y, z, fx, fz) {
     this.emit({ pos: [x - fx * 5, y, z - fz * 5], vel: [-fx * 20, 0, -fz * 20], life: 0.11, size: 13, color: [1, 0.97, 0.8], end: [1, 0.45, 0.1], glow: 1, drag: 0 });
     this.emit({ pos: [x - fx * 8, y, z - fz * 8], life: 0.07, size: 30, color: [1, 0.6, 0.2], end: [1, 0.3, 0.05], glow: 1, opa: 0.55, drag: 0 });
   }
 
-  // flare: bright head + long smoke trail; chaff: glittering cloud
-  flareHead(f, dt) {
+  // flare: bright head (the smoke is a ribbon trail); chaff: glittering cloud
+  flareHead(f) {
     this.emit({ pos: [f.x, f.y, f.z], life: 0.06, size: rr(20, 26), color: [1, 0.97, 0.85], end: [1, 0.6, 0.2], glow: 1, drag: 0 });
     this.emit({ pos: [f.x, f.y, f.z], life: 0.09, size: rr(38, 50), color: [1, 0.55, 0.2], end: [1, 0.3, 0.05], glow: 1, opa: 0.45, drag: 0 });
-    const n = this.count('ft' + f.id, CFG.FX_FLARE_TRAIL_RATE, dt);
-    for (let i = 0; i < n; i++) this.emit({ pos: [f.x + rr(-1, 1), f.y, f.z + rr(-1, 1)], vel: [rr(-2, 2), rr(0, 3), rr(-2, 2)], life: rr(2.4, 3.4), size: 6, grow: 3.2, color: [0.98, 0.96, 0.92], end: [0.7, 0.7, 0.7], opa: 0.75, drag: 0.6, rise: 1 });
   }
   chaffCloud(c, dt) {
     const k = c.life / CFG.CHAFF_LIFE, rad = 8 + 30 * (1 - k);
@@ -191,11 +184,10 @@ export class Particles {
     for (let i = 0; i < 10; i++) this.emit({ pos: [x, y, z], vel: [rr(-40, 40), rr(-12, 12), rr(-40, 40)], life: rr(0.2, 0.55), size: rr(4, 8), color: [1, 0.9, 0.55], end: [1, 0.4, 0.1], glow: 1, drag: 2.5 });
   }
 
-  // player exhaust / trouble: contrail normally, heavy dark smoke + fire when stalled or low (sev 0..1)
+  // player exhaust / trouble (the contrail itself is a ribbon trail): heavy dark smoke + fire when stalled or low (sev 0..1)
   jetTrail(pos, fx, fz, throttle, sev, dt) {
     const [x, y, z] = pos;
-    let n = this.count('contrail', CFG.FX_CONTRAIL_RATE * (1 - sev * 0.6), dt);
-    for (let i = 0; i < n; i++) this.emit({ pos: [x, y, z], vel: [-fx * 6 + rr(-1, 1), rr(0, 1.5), -fz * 6 + rr(-1, 1)], life: rr(1.3, 2), size: 3.2, grow: 1.6, color: [0.95, 0.97, 1], end: [0.8, 0.83, 0.88], opa: 0.22, drag: 0.7 });
+    let n;
     if (throttle > 0.3) {                                            // faint hot-exhaust haze, no flame (the F-117's F404s have no afterburner)
       n = this.count('shimmer', 25 * throttle, dt);
       for (let i = 0; i < n; i++) this.emit({ pos: [x, y, z], vel: [-fx * 22, 0, -fz * 22], life: 0.3, size: 4 + 3 * throttle, grow: 3, color: [0.78, 0.82, 0.88], end: [0.7, 0.74, 0.8], opa: 0.03 + 0.07 * throttle, drag: 0.5 });

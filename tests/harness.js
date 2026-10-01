@@ -13,7 +13,7 @@ export function install() {
   // isolated duel: no sites, far waypoint, one missile launched R0 metres away at azimuth az
   function setup(s, R0, az, v0 = 100) {
     seed = s * 7919 + 13; g.startGame(1000 + s); window.__freeze = true;
-    g.level.sites.length = 0; g.sites.reset(); g.level.wps[g.wpN] = { x: 1e7, z: 1e7 };
+    g.level.sites.length = 0; g.sites.reset(); g.level.wps[g.wpN] = { x: 1e7, z: 1e7 }; g.level.targets.length = 0;
     const p = g.player; p.x = 0; p.z = 0; p.heading = 0; p.v = v0; p.throttle = 0.55; p.alt = 600;
     g.input.down.clear(); g.step(1 / 60);
     return g.spawnMissile(Math.sin(az) * R0, -Math.cos(az) * R0, R0);

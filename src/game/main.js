@@ -6,6 +6,9 @@ import { Particles } from './particles.js';
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { SiteManager } from './sam.js';
+import { TargetManager } from './targets.js';
+import { Weapons } from './weapons.js';
+import { TrailSystem } from './trails.js';
 import { Missile } from './missile.js';
 import { MFD } from './mfd.js';
 import { HUD } from './hud.js';
@@ -24,6 +27,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 const world = new World(renderer);
 const scene = world.scene;
 const particles = new Particles(scene, terrainH);
+const trails = new TrailSystem(scene);
+let jetTrails = [];                          // one ribbon per engine
 const input = new Input();
 const audio = new Audio();
 const nvg = new NVG(renderer);
@@ -31,8 +36,10 @@ const radio = new Radio(audio, (who, text, dur) => hud.caption(who, text, dur));
 const hud = new HUD();
 const mfd = new MFD($('mfd'));
 const player = new Player(scene, renderer, (m) => hud.overlay(true, 'LOADING', m));
-let sites, missileProto, level;
+let sites, targets, weapons, missileProto, level;
 let missiles = [], flares = [];            // flares = every decoy (flare pods and chaff clouds)
+let sel = null;                            // designated ground target (Tab cycles; the laser guides bombs to it)
+let sol = null, gT = -1, gAuto = false;    // bombing solution for sel; G: held time (-1 = not held / used) and auto-release consent
 let state = 'loading', score = 0, wpDone = 0, wpN = 1, legTracked = false, time = 0, best = 0, deadTimer = 0, decoyId = 0, flareArm = false;
 const acc = { lock: 0, msl: 0, stall: 0 };
 try { best = +localStorage.getItem('f117-best') || 0; } catch (e) { /* storage may be blocked */ }
@@ -59,11 +66,14 @@ const CONTROLS_HTML = `<table class="keys">
       <tr><td><b>A / D</b> or <b>← / →</b></td><td>turn</td></tr>
       <tr><td><b>W / S</b> or <b>↑ / ↓</b></td><td>throttle up / down</td></tr>
       <tr><td><b>Space</b> or <b>F</b></td><td>flares + chaff (hold to keep dropping)</td></tr>
+      <tr><td><b>B</b></td><td>bomb bay doors open / close (radar sees you further while not shut)</td></tr>
+      <tr><td><b>G</b></td><td>release bomb (doors fully open): tap = drop now · hold = drops itself when the release cue meets the marker</td></tr>
+      <tr><td><b>Tab</b></td><td>next target (the laser guides the bomb to it)</td></tr>
       <tr><td><b>Q / E</b></td><td>MFD range</td></tr>
       <tr><td><b>N</b></td><td>night vision on / off</td></tr>
       <tr><td><b>V</b></td><td>radio chatter on / off</td></tr>
       <tr><td><b>P</b> pause · <b>R</b> restart · <b>M</b> mute · <b>+ / −</b> volume</td><td></td></tr>
-      <tr><td>Gamepad</td><td>stick = turn/throttle · A/RT = flares · Start = pause</td></tr>
+      <tr><td>Gamepad</td><td>stick = turn/throttle · A/RT = flares · B = bay · RB = release · LB = next target · Start = pause</td></tr>
     </table>`;
 const stats = { time: 0, undetected: 0, evaded: 0, flaresUsed: 0 };
 let settings = { volume: 0.8, time: 'day', radio: true, nvg: true };
@@ -84,17 +94,26 @@ function applyTime() {
   const night = settings.time === 'night';
   world.setTimeOfDay(night); nvg.gain = night ? CFG.NVG_GAIN : CFG.NVG_GAIN_DAY; nvg.on = night && settings.nvg;
 }
+const TARGETS = () => CFG.OBJECTIVE === 'targets';
+const legTargets = () => level.targets.filter((t) => t.leg === wpN);
+function setObjective() {
+  world.setWaypoint(TARGETS() ? null : level.wps[wpN]);            // the gold beacon is the waypoint mission's marker
+  $('passed-lbl').textContent = TARGETS() ? 'TARGETS' : 'WAYPOINTS';
+  $('wpt').classList.toggle('tgt', TARGETS());
+}
 function startGame(seed) {
   audio.init(); audio.setVolume(settings.volume); radio.enabled = settings.radio; radio.preload(); radio.stop();
   Object.assign(stats, { time: 0, undetected: 0, evaded: 0, flaresUsed: 0 });
-  score = 0; wpDone = 0; wpN = 1; legTracked = false; time = 0; flareArm = false;
+  score = 0; wpDone = 0; wpN = 1; legTracked = false; time = 0; flareArm = false; sel = null; sol = null; gT = -1; gAuto = false;
   for (const m of missiles) m.dispose(); missiles = []; flares = [];
-  particles.clear(); player.reset(); player.syncMesh();
+  particles.clear(); trails.clear(); player.reset(); player.syncMesh(); weapons.reset();
+  jetTrails = [trails.create('jet'), trails.create('jet')];
   if (!prepared || (typeof seed === 'number' && prepared.seed !== seed)) prepare(seed);
   level = prepared.level; prepared = null; level.ensure(wpN);
   sites.streamAround(0, 0, level);
+  targets.reset(); targets.sync(level, 0, 0);
   applyTime();
-  world.setWaypoint(level.wps[wpN]);
+  setObjective();
   world.update(0, player.x, player.z, 0, 0, true);
   hud.score(0, 0); hud.overlay(false); hud.warnings([]); hud.caption(null);
   state = 'play';
@@ -107,30 +126,61 @@ function warmup() {
   const s0 = [...sites.sites.values()][0], W = world.camera, keep = { p: W.position.clone(), q: W.quaternion.clone() };
   const m = new Missile({ x: s0 ? s0.x + 20 : 300, z: s0 ? s0.z : -300, range: 1200, scene }, player, missileProto, scene);
   particles.explosion(m.x, m.y, m.z, 1); particles.flareBurst(m.x, m.y + 5, m.z); particles.siteLaunch(m.x, m.y, m.z);
+  for (const name of Object.keys(CFG.TRAILS)) { const t = trails.create(name); t.update(m.x, m.y, m.z); t.update(m.x + 30, m.y, m.z + 5); }   // compile every trail material
+  trails.update(0);
   for (const st of sites.sites.values()) st.group.visible = st.hi.visible = st.lo.visible = true;
+  if (prepared) targets.sync(prepared.level, 0, 0, Infinity);
   if (s0) { W.position.set(s0.x, s0.gy + 90, s0.z + 60); W.lookAt(s0.x + 10, s0.gy, s0.z); }
   for (const night of [false, true]) {
     world.setTimeOfDay(night); renderer.compile(scene, W); renderer.render(scene, W);
     nvg.on = true; nvg.render(scene, W, 0);
   }
-  m.dispose(); particles.clear(); nvg.on = false; W.position.copy(keep.p); W.quaternion.copy(keep.q);
+  m.dispose(); particles.clear(); trails.clear(); targets.reset(); nvg.on = false; W.position.copy(keep.p); W.quaternion.copy(keep.q);
   world.setTimeOfDay(false);
   if (prepared) sites.streamAround(0, 0, prepared.level);
 }
 
 function die(reason, ground = false) {
   if (!player.alive && state !== 'play') return;
-  player.alive = false; player.root.visible = false; player.shadow.visible = false;
+  player.alive = false; player.root.visible = false; player.shadow.visible = false; jetTrails.forEach((t) => t.end());
   particles.jetDeath(player.x, ground ? player.gy + 3 : player.y, player.z, player.fx * player.v, player.fz * player.v);
   audio.boom(0.5, 1.4); audio.silence(); world.shake = 1;
   state = 'dead'; deadTimer = 1.4; deathReason = reason;
   radio.call(ground ? 'crash' : 'dead', 3);
+  if (TARGETS() && score > 0) recordResult({ score });       // shot down: the score counts, no completion time or rank
+}
+
+// ---------- mission results (read by the mission-select page, index.html) ----------
+// localStorage 'jow:stats:<MISSION_ID>' = { rank, scores: top 3 high -> low, times: top 3 fast -> slow (s) }, same rules as JOW.recordResult() there
+const RANK_ORDER = ['S', 'A', 'B', 'C', 'D'];
+function rankOf(pts, t) { pts += Math.max(0, CFG.RANK_PAR_TIME - t) * CFG.RANK_TIME_BONUS; return (CFG.RANKS.find(([, min]) => pts >= min) || ['D'])[0]; }
+function recordResult({ score: sc, timeSec, rank }) {
+  if (window.JOW && window.JOW.recordResult) { window.JOW.recordResult(CFG.MISSION_ID, { score: sc, timeSec, rank }); return; }   // index page in the same context
+  try {
+    const key = 'jow:stats:' + CFG.MISSION_ID, s = Object.assign({ rank: null, scores: [], times: [] }, JSON.parse(localStorage.getItem(key)) || {});
+    if (Number.isFinite(sc)) s.scores = [...s.scores, sc].sort((a, b) => b - a).slice(0, 3);
+    if (Number.isFinite(timeSec)) s.times = [...s.times, timeSec].sort((a, b) => a - b).slice(0, 3);
+    if (rank && (s.rank === null || RANK_ORDER.indexOf(rank) < RANK_ORDER.indexOf(s.rank))) s.rank = rank;
+    localStorage.setItem(key, JSON.stringify(s));
+  } catch (e) { /* storage may be blocked */ }
+}
+const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
+// MISSION-COMPLETE HOOK: called from nextLeg() once the last target leg (CFG.MISSION_LEGS) is cleared or skipped
+function missionComplete() {
+  state = 'done'; audio.silence();
+  const timeSec = Math.round(stats.time), rank = rankOf(score, timeSec);
+  recordResult({ score, timeSec, rank });
+  const newBest = score > best; if (newBest) { best = score; try { localStorage.setItem('f117-best', best); } catch (e) { /* ignore */ } }
+  audio.chime([660, 880, 1320, 1760]);
+  hud.overlay(true, 'MISSION COMPLETE', `<p class="rank">RANK <b>${rank}</b></p><p>Score <b>${score}</b>${newBest ? ' &nbsp;<b style="color:var(--gold)">NEW BEST</b>' : ''} &nbsp;·&nbsp; Time <b>${mmss(timeSec)}</b> &nbsp;·&nbsp; Targets <b>${wpDone}</b></p><p class="hint">Clean legs ${stats.undetected} &nbsp;·&nbsp; Missiles beaten ${stats.evaded} &nbsp;·&nbsp; Flares dropped ${stats.flaresUsed}</p><p class="hint">Press <b>R</b> or <b>Enter</b> to fly again &nbsp;·&nbsp; <b>Esc</b> mission select</p>`);
+  setTimeout(() => prepare(), 60);
 }
 let deathReason = '';
 
 function showDeath() {
   if (score > best) { best = score; try { localStorage.setItem('f117-best', best); } catch (e) { /* ignore */ } }
-  hud.overlay(true, deathReason, `<p>Score <b>${score}</b> &nbsp;·&nbsp; Waypoints <b>${wpDone}</b> &nbsp;·&nbsp; Best <b>${best}</b>${score >= best && score > 0 ? ' &nbsp;<b style="color:#ffd23a">NEW BEST</b>' : ''}</p><p class="hint">Flight time ${Math.floor(stats.time / 60)}:${String(Math.floor(stats.time % 60)).padStart(2, '0')} &nbsp;·&nbsp; Clean legs ${stats.undetected} &nbsp;·&nbsp; Missiles beaten ${stats.evaded} &nbsp;·&nbsp; Flares dropped ${stats.flaresUsed}</p><p class="hint">Time of day: <b>${settings.time.toUpperCase()}</b> (press <b>T</b> to switch) &nbsp;·&nbsp; Press <b>R</b> or <b>Enter</b> to fly again</p>`);
+  hud.overlay(true, deathReason, `<p>Score <b>${score}</b> &nbsp;·&nbsp; ${TARGETS() ? 'Targets' : 'Waypoints'} <b>${wpDone}</b> &nbsp;·&nbsp; Best <b>${best}</b>${score >= best && score > 0 ? ' &nbsp;<b style="color:#ffd23a">NEW BEST</b>' : ''}</p><p class="hint">Flight time ${Math.floor(stats.time / 60)}:${String(Math.floor(stats.time % 60)).padStart(2, '0')} &nbsp;·&nbsp; Clean legs ${stats.undetected} &nbsp;·&nbsp; Missiles beaten ${stats.evaded} &nbsp;·&nbsp; Flares dropped ${stats.flaresUsed}</p><p class="hint">Time of day: <b>${settings.time.toUpperCase()}</b> (press <b>T</b> to switch) &nbsp;·&nbsp; Press <b>R</b> or <b>Enter</b> to fly again &nbsp;·&nbsp; <b>Esc</b> mission select</p>`);
   setTimeout(() => prepare(), 60);                       // build the next course while the death screen is up
 }
 
@@ -144,7 +194,7 @@ function deployFlare() {
   let cvx = 0, cvz = 0;
   for (const side of [-1, 1]) {
     const f = { id: 'f' + decoyId++, kind: 'flare', x: px + rx * side * 6, z: pz + rz * side * 6, y, vx: jvx - player.fx * CFG.FLARE_EJECT_BACK + rx * side * CFG.FLARE_EJECT_SIDE, vz: jvz - player.fz * CFG.FLARE_EJECT_BACK + rz * side * CFG.FLARE_EJECT_SIDE, life: CFG.FLARE_LIFE, maxLife: CFG.FLARE_LIFE };
-    flares.push(f); cvx += f.vx; cvz += f.vz;
+    f.trail = trails.create('flare'); flares.push(f); cvx += f.vx; cvz += f.vz;
     particles.flareBurst(f.x, f.y, f.z);
   }
   flares.push({ id: 'c' + decoyId++, kind: 'chaff', x: px, z: pz, y, vx: cvx / 2 * CFG.CHAFF_SPREAD, vz: cvz / 2 * CFG.CHAFF_SPREAD, life: CFG.CHAFF_LIFE, maxLife: CFG.CHAFF_LIFE });
@@ -156,6 +206,7 @@ function updateDecoys(dt) {
     const k = 1 - Math.min(1, CFG.FLARE_DRAG * dt); f.vx *= k; f.vz *= k;
     f.y = Math.max(terrainH(f.x, f.z) + 2, f.y - CFG.FLARE_SINK * dt);
     if (f.life > 0) f.kind === 'flare' ? particles.flareHead(f, dt) : particles.chaffCloud(f, dt);
+    if (f.trail) { if (f.life > 0) f.trail.update(f.x, f.y, f.z, f.y); else { f.trail.end(); f.trail = null; } }
   }
   flares = flares.filter((f) => f.life > 0);
   let nf = null; for (const f of flares) if (f.kind === 'flare' && (!nf || f.life > nf.life)) nf = f;
@@ -163,21 +214,59 @@ function updateDecoys(dt) {
   if (nf && world.night) { fl.position.set(nf.x, nf.y, nf.z); fl.intensity = 3500 * Math.min(1, nf.life / nf.maxLife * 1.6); } else fl.intensity = 0;
 }
 
-function reachWaypoint() {
-  const n = wpN, ghost = !legTracked, pts = CFG.WP_SCORE + CFG.WP_SCORE_STEP * (n - 1) + (ghost ? CFG.SCORE_UNDETECTED : 0);
-  score += pts; wpDone++; if (ghost) stats.undetected++; wpN++; legTracked = false;
-  player.flares = Math.min(CFG.FLARES_MAX, player.flares + CFG.FLARE_REFUND_PER_WP);
+// leg finished (waypoint reached or target cluster destroyed): bonus, flare refund, next leg
+function nextLeg(label, base, skipped = false) {
+  const ghost = !legTracked && !skipped, pts = base + (ghost ? CFG.SCORE_UNDETECTED : 0);
+  score += pts; if (ghost) stats.undetected++; wpN++; legTracked = false;
+  player.flares = Math.min(CFG.FLARES_MAX, player.flares + CFG.FLARE_REFUND_PER_WP); weapons.rearm();
   level.ensure(wpN);
-  world.setWaypoint(level.wps[wpN]);
-  hud.toast(`WAYPOINT ${n}  +${pts}${ghost ? '  (UNDETECTED)' : ''}`, 'good');
+  setObjective();
+  hud.toast(`${label}  +${pts}${ghost ? '  (UNDETECTED)' : ''}`, 'good');
   audio.chime(ghost ? [660, 880, 1320] : [660, 990]);
   radio.call(ghost ? 'wpClean' : 'wp', 2);
   hud.score(score, wpDone);
+  if (TARGETS() && wpN > CFG.MISSION_LEGS) missionComplete();
+}
+function reachWaypoint() { wpDone++; nextLeg(`WAYPOINT ${wpN}`, CFG.WP_SCORE + CFG.WP_SCORE_STEP * (wpN - 1)); }
+
+// a weapon (or the debug hook) destroys a target; accuracy 0..1 = how close the blast was to dead centre
+function hitTarget(t, accuracy = 0) {
+  if (!t.alive) return;
+  const T = CFG.TARGET_TYPES[t.type], pts = Math.round(T.score * (1 + CFG.TARGET_ACC_BONUS * accuracy));
+  targets.kill(t, particles); score += pts; wpDone++;
+  hud.toast(`${T.label} DESTROYED  +${pts}`, 'good'); hud.score(score, wpDone);
+  if (legTargets().every((o) => !o.alive)) nextLeg(`LEG ${wpN} CLEARED`, 0);
+}
+
+function weaponCtx() {
+  return { targets: level.targets.filter((t) => t.alive), sel: TARGETS() ? sel : null, particles, audio, hit: hitTarget, shake: (v) => { world.shake = Math.max(world.shake, v); },
+    damaged: (t) => { hud.toast(`${CFG.TARGET_TYPES[t.type].label} DAMAGED — HIT IT AGAIN`, 'warn'); },
+    lase: (on) => { if (player.alive) hud.toast(on ? 'LASER SPOT REACQUIRED' : 'LASER LOST — BOMB BALLISTIC', on ? 'good' : 'bad'); } };
+}
+function pickle() {
+  const r = weapons.pickle(player, sel);
+  if (r === 'ok') { hud.toast(sel ? `BOMB AWAY — ${CFG.TARGET_TYPES[sel.type].label}` : 'BOMB AWAY'); audio.beep(520, 0.12, 0.05, 'triangle'); }
+  else if (r === 'shut') hud.toast(weapons.doorWant ? 'BAY DOORS STILL OPENING' : 'BAY CLOSED — PRESS B', 'warn');
+  else if (r === 'empty') hud.toast('BAY EMPTY', 'bad');
+}
+// screen position of a ground target for the HUD marker (on = inside the view)
+function markerOf(t) {
+  if (!t) return null;
+  tmp.set(t.x, terrainH(t.x, t.z) + 2, t.z).project(world.camera);
+  let x = (tmp.x + 1) / 2 * innerWidth, y = (1 - tmp.y) / 2 * innerHeight; const behind = tmp.z > 1;
+  if (behind) { x = innerWidth - x; y = innerHeight - y; }
+  return { x, y, on: !behind && x > 0 && x < innerWidth && y > 0 && y < innerHeight, dist: Math.hypot(t.x - player.x, t.z - player.z), label: CFG.TARGET_TYPES[t.type].label };
+}
+// keep a live designated target: the leg's nearest unless one was picked with Tab. Returns the leg's live targets.
+function keepTarget() {
+  const left = legTargets().filter((t) => t.alive);
+  if (!sel || !left.includes(sel)) sel = nearestTarget(left);
+  return left;
 }
 
 function missileCtx() {
   return {
-    player, particles, flares, time,
+    player, particles, trails, flares, time,
     onKill: () => die('SHOT DOWN'),
     onNotch: () => { hud.toast('SEEKER LOST', 'good'); audio.beep(500, 0.2, 0.05, 'sine'); stats.evaded++; radio.call('evaded', 2); },
     onSeduced: () => { hud.toast('MISSILE SEDUCED BY DECOY', 'good'); audio.beep(700, 0.15, 0.05, 'triangle'); stats.evaded++; radio.call('decoy', 2); },
@@ -189,6 +278,7 @@ function missileCtx() {
 
 // ---------- per-frame ----------
 const tmp = new THREE.Vector3();
+const nearestTarget = (list) => list.reduce((b, t) => (!b || Math.hypot(t.x - player.x, t.z - player.z) < Math.hypot(b.x - player.x, b.z - player.z) ? t : b), null);
 function step(dt) {
   time += dt; stats.time += dt;
   if (input.hit('KeyQ')) mfd.cycle(-1);
@@ -203,21 +293,43 @@ function step(dt) {
     onCrash: () => die('CRASHED', true),
   });
   if (player.stalled) world.shake = Math.max(world.shake, 0.25);
+  if (TARGETS()) {
+    const left = keepTarget();
+    if (input.hit('Tab') && left.length > 1) { sel = left[(left.indexOf(sel) + 1) % left.length]; hud.toast(`TGT ${CFG.TARGET_TYPES[sel.type].label}`); audio.beep(1100, 0.05, 0.04); }
+  } else sel = null;
+  if (input.hit('KeyB') && player.alive) {
+    const open = weapons.toggleBay();
+    hud.toast(open ? 'BAY DOORS OPENING' : 'BAY DOORS CLOSING', open ? 'warn' : ''); audio.beep(open ? 320 : 260, 0.25, 0.05, 'triangle');
+  }
+  weapons.update(dt, player, weaponCtx());
+  if (state !== 'play') return;                         // the last target just completed the mission
+  sol = TARGETS() ? weapons.solution(player, sel) : null;
+  // G: a tap (< PICKLE_HOLD) drops on key up; holding it gives consent and the bomb leaves by itself when the release cue meets the marker
+  if (input.hit('KeyG')) { gT = 0; gAuto = false; }
+  if (gT >= 0 && player.alive) {
+    if (input.held('KeyG')) {
+      gT += dt;
+      if (!gAuto && gT >= CFG.PICKLE_HOLD) { gAuto = true; if (sol && sol.tRel > 0) hud.toast('AUTO RELEASE — KEEP HOLDING G', 'warn'); }
+      if (gAuto && (!sol || sol.tRel <= 0) && (weapons.bayReady || !weapons.doorWant)) { pickle(); gT = -1; }   // still opening: wait for the doors
+    } else { if (!gAuto) pickle(); gT = -1; gAuto = false; }
+  }
+  if (TARGETS() && player.alive && weapons.empty && legTargets().some((t) => t.alive)) { hud.toast('OUT OF BOMBS — LEG SKIPPED', 'bad'); nextLeg(`LEG ${wpN} SKIPPED`, 0, true); }
 
   if (player.alive) {
     sites.streamAround(player.x, player.z, level);
     const sev = Math.max(player.stalled ? 1 : 0, player.alt < CFG.ALT_LOW_WARN ? 1 - player.alt / CFG.ALT_LOW_WARN : 0);
     player.tailPos(tmp);
     particles.jetTrail([tmp.x, tmp.y, tmp.z], player.fx, player.fz, player.throttle, sev, dt);
+    jetTrails.forEach((t, i) => t.update(tmp.x - player.fz * (i ? 2.5 : -2.5), tmp.y, tmp.z + player.fx * (i ? 2.5 : -2.5), player.y));
 
-    const wp = level.wps[wpN];
-    if (Math.hypot(wp.x - player.x, wp.z - player.z) < CFG.WP_RADIUS) reachWaypoint();
+    if (TARGETS()) targets.sync(level, player.x, player.z);
+    else { const wp = level.wps[wpN]; if (Math.hypot(wp.x - player.x, wp.z - player.z) < CFG.WP_RADIUS) reachWaypoint(); }
   }
 
   let maxLock = 0;
   for (const s of sites.sites.values()) {
     if (!player.alive) break;
-    if (s.update(dt, player) === 'fire') {
+    if (s.update(dt, player, trails.detect(s.x, s.z)) === 'fire') {
       if (missiles.length >= CFG.MAX_MISSILES_INFLIGHT) { s.desc.ammo++; s.cooldown = 1; }
       else {
         missiles.push(new Missile(s, player, missileProto, scene));
@@ -249,9 +361,15 @@ function step(dt) {
   const threat = missiles.filter((m) => m.mode !== 'lost' || (m.lostAge < CFG.REACQ_TIME && m.dPlayer < CFG.SEEKER_RANGE)).sort((a, b) => a.dPlayer - b.dPlayer)[0];
   hud.seeker(threat);
   hud.gauges(player);
-  hud.drawHUD(player, time, { track: maxLock > 0.05 && maxLock < 1 && !live.length, lock: maxLock >= 1 && !live.length, msl: live.length > 0, nvg: nvg.on });
-  const wp = level.wps[wpN];
-  hud.wpt(Math.atan2(wp.x - player.x, -(wp.z - player.z)) - player.heading, Math.hypot(wp.x - player.x, wp.z - player.z), wpN, !legTracked);
+  hud.drawHUD(player, time, { track: maxLock > 0.05 && maxLock < 1 && !live.length, lock: maxLock >= 1 && !live.length, msl: live.length > 0, nvg: nvg.on, bay: weapons.doorsOpen, wpn: weapons.spec.name, bombs: weapons.rounds,
+    sight: sol && { ...sol, armed: weapons.doorsOpen, auto: gAuto && gT >= 0 }, mark: TARGETS() && player.alive ? markerOf(sel) : null });
+  if (TARGETS()) {
+    const all = legTargets(), left = all.filter((t) => t.alive), tg = sel && sel.alive ? sel : nearestTarget(left);
+    if (tg) hud.wpt(Math.atan2(tg.x - player.x, -(tg.z - player.z)) - player.heading, Math.hypot(tg.x - player.x, tg.z - player.z), `LEG ${wpN}/${CFG.MISSION_LEGS}  ·  ${CFG.TARGET_TYPES[tg.type].label}  ${left.length}/${all.length}`, !legTracked);
+  } else {
+    const wp = level.wps[wpN];
+    hud.wpt(Math.atan2(wp.x - player.x, -(wp.z - player.z)) - player.heading, Math.hypot(wp.x - player.x, wp.z - player.z), `WPT ${wpN}`, !legTracked);
+  }
 
   { // continuous audio: engine, wind, nearest inbound missile (pan/doppler), flare hiss
     let mm = null;
@@ -278,29 +396,31 @@ function frame(t) {
   if (input.hit('KeyM')) { const m = audio.toggleMute(); if (state === 'play') hud.toast(m ? 'SOUND OFF' : 'SOUND ON'); }
   if (input.hit('Minus', 'NumpadSubtract', 'BracketLeft', 'Comma')) { settings.volume = Math.max(0, +(settings.volume - 0.1).toFixed(2)); audio.setVolume(settings.volume); saveSettings(); hud.toast('VOLUME ' + Math.round(settings.volume * 100) + '%'); }
   if (input.hit('Equal', 'NumpadAdd', 'BracketRight', 'Period')) { settings.volume = Math.min(1, +(settings.volume + 0.1).toFixed(2)); audio.setVolume(settings.volume); saveSettings(); hud.toast('VOLUME ' + Math.round(settings.volume * 100) + '%'); }
-  if (state === 'paused' || state === 'menu') audio.silence();
+  if (state === 'paused' || state === 'menu' || state === 'done') audio.silence();
   if (input.hit('KeyN') && (state === 'play' || state === 'paused')) { settings.nvg = !settings.nvg; nvg.on = settings.nvg; saveSettings(); hud.toast(settings.nvg ? 'NVG ON' : 'NVG OFF'); }
   if (input.hit('KeyV')) { settings.radio = !settings.radio; radio.enabled = settings.radio; if (!settings.radio) { radio.stop(); hud.caption(null); } saveSettings(); if (state === 'play') hud.toast(settings.radio ? 'RADIO ON' : 'RADIO OFF'); }
   if ((state === 'menu' || state === 'dead') && input.hit('KeyT')) { settings.time = settings.time === 'night' ? 'day' : 'night'; if (settings.nvg === false && settings.time === 'night') settings.nvg = true; saveSettings(); applyTime(); if (state === 'menu') showMenu(); else showDeath(); }
+  if ((state === 'menu' || state === 'dead' || state === 'done') && input.hit('Escape')) { location.href = 'index.html'; return; }   // back to the mission select
   if (state === 'menu' && input.hit('Enter', 'Space')) { startGame(); }
-  else if (state === 'dead' && input.hit('KeyR', 'Enter')) { startGame(); }
+  else if ((state === 'dead' || state === 'done') && input.hit('KeyR', 'Enter')) { startGame(); }
   else if (state === 'play' && input.hit('KeyR')) { startGame(); }
-  else if (state === 'play' && input.hit('KeyP', 'Escape')) { state = 'paused'; audio.silence(); hud.overlay(true, 'PAUSED', `<p>Score <b>${score}</b> &nbsp;·&nbsp; Waypoint <b>${wpN}</b></p>${CONTROLS_HTML}<p class="hint">Press <b>P</b> to resume · <b>R</b> to restart</p>`); }
+  else if (state === 'play' && input.hit('KeyP', 'Escape')) { state = 'paused'; audio.silence(); hud.overlay(true, 'PAUSED', `<p>Score <b>${score}</b> &nbsp;·&nbsp; Leg <b>${wpN}</b></p>${CONTROLS_HTML}<p class="hint">Press <b>P</b> to resume · <b>R</b> to restart</p>`); }
   else if (state === 'paused' && input.hit('KeyP', 'Escape')) { state = 'play'; hud.overlay(false); }
   else if (state === 'play') { if (!window.__freeze) step(dt); }
   else if (state === 'dead') {
     // world keeps moving so the crash plays out
-    time += dt; updateDecoys(dt);
+    time += dt; updateDecoys(dt); weapons.update(dt, player, weaponCtx());
     const ctx = missileCtx();
     for (const m of missiles) if (!m.dead) m.update(dt, ctx);
     missiles = missiles.filter((m) => { if (m.dead) { m.dispose(); return false; } return true; });
     deadTimer -= dt; if (deadTimer <= 0 && $('overlay').style.display !== 'flex') showDeath();
   }
 
-  if (state !== 'paused') particles.update(dt);
+  if (state !== 'paused') { particles.update(dt); trails.update(dt); }
   if (state !== 'loading') {
     world.update(state === 'paused' ? 0 : dt, player.x, player.z, player.fx * player.v, player.fz * player.v, false, player.alive || state === 'dead' ? player.y : null);
-    mfd.draw({ player, sites: sites ? [...sites.sites.values()] : [], missiles, flares, time, wp: level ? level.wps[wpN] : null, wpNext: level ? level.wps[wpN + 1] : null, wpN });
+    mfd.draw({ player, sites: sites ? [...sites.sites.values()] : [], missiles, flares, time, wp: level && !TARGETS() ? level.wps[wpN] : null, wpNext: level && !TARGETS() ? level.wps[wpN + 1] : null, wpN,
+      targets: level && TARGETS() ? legTargets().filter((t) => t.alive) : null, sel, aim: weapons.ring.visible ? { x: weapons.aim.x, z: weapons.aim.z, r: weapons.aimR } : null });
   }
   if (nvg.on) nvg.render(scene, world.camera, dt); else renderer.render(scene, world.camera);
   if (state === 'play') adaptRes(dt * 1000, dt);
@@ -309,10 +429,10 @@ function frame(t) {
 
 // expose for debugging / automated tests
 window.__game = {
-  step, input, CFG, world, mfd, particles, terrainH, startGame, renderer,
+  step, input, CFG, world, mfd, particles, trails, terrainH, startGame, renderer,
   get player() { return player; }, get sites() { return sites; }, get missiles() { return missiles; }, get flares() { return flares; },
-  get level() { return level; }, get wpN() { return wpN; }, get wp() { return level.wps[wpN]; }, get state() { return state; }, get score() { return score; }, get wpDone() { return wpDone; },
-  get legTracked() { return legTracked; },
+  get weapons() { return weapons; }, get level() { return level; }, get targets() { return level.targets; }, destroyTarget: (t, acc) => hitTarget(t, acc), get wpN() { return wpN; }, get wp() { return level.wps[wpN]; }, get state() { return state; }, get score() { return score; }, get wpDone() { return wpDone; },
+  get legTracked() { return legTracked; }, get sel() { return sel; }, set sel(t) { sel = t; },
   // test helper: launch a missile from an arbitrary point as if a site fired it
   spawnMissile(x, z, range = 1200) {
     const m = new Missile({ x, z, range, scene }, player, missileProto, scene); missiles.push(m); return m;
@@ -322,12 +442,12 @@ window.__game = {
 function showMenu() {
   const night = settings.time === 'night';
   hud.overlay(true, 'F-117 STEALTH RUN', `
-    <p>Fly the waypoint course. Threaded between single Patriot batteries there is always a narrow lane to the next waypoint. Find it, stay nose-on, and don't get seen.</p>
+    <p>${TARGETS() ? 'Clear ${CFG.MISSION_LEGS} target areas: bunkers, radars and tanks at the end of each leg. Threaded' : 'Fly the waypoint course. Threaded'} between single Patriot batteries there is always a narrow lane to the next ${TARGETS() ? 'target area' : 'waypoint'}. Find it, stay nose-on, and don't get seen.</p>
     <div class="opts"><span class="lbl">TIME OF DAY</span>
       <button class="opt ${night ? '' : 'sel'}" data-time="day">DAY</button><button class="opt ${night ? 'sel' : ''}" data-time="night">NIGHT · NVG</button></div>
     ${CONTROLS_HTML}
     <p class="hint">A missile is only beaten by making it work: beam it (fly perpendicular) for a sustained time, drop flares late while turning, and let it bleed its energy. Early flares do nothing.</p>
-    <p class="hint">Best: <b>${best}</b> &nbsp;·&nbsp; <b>T</b> switches day / night &nbsp;·&nbsp; Press <b>Enter</b> or <b>Space</b> to start</p>`);
+    <p class="hint">Best: <b>${best}</b> &nbsp;·&nbsp; <b>T</b> switches day / night &nbsp;·&nbsp; Press <b>Enter</b> or <b>Space</b> to start &nbsp;·&nbsp; <b>Esc</b> mission select</p>`);
   for (const b of document.querySelectorAll('.opt')) b.onclick = () => { settings.time = b.dataset.time; if (settings.time === 'night') settings.nvg = true; saveSettings(); applyTime(); showMenu(); };
 }
 
@@ -336,7 +456,9 @@ function showMenu() {
   await player.load();
   const launcher = await loadModel('mim-104-patriot', { renderer, onProgress: (m) => hud.overlay(true, 'LOADING', m) });
   missileProto = await loadModel('pac-3-mse', { renderer });
-  sites = new SiteManager(scene, launcher);
+  sites = new SiteManager(scene, launcher); targets = new TargetManager(scene);
+  const wm = {}; for (const [id, w] of Object.entries(CFG.WEAPONS)) if (w.model) wm[id] = await loadModel(w.model, { renderer });
+  weapons = new Weapons(scene, wm);
   level = new Level(1); level.ensure(1);          // placeholder so the menu has a world behind it
   player.syncMesh();
   radio.load();

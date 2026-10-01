@@ -29,6 +29,8 @@ export class Level {
     this.legs = [];                    // legs[n-1] = leg ending at waypoint n
     this.sites = [];                   // site descriptors, all generated legs
     this.sitesDone = 0;                // sites generated for legs 1..sitesDone
+    this.targets = [];                 // ground targets {key, leg, type, x, z, alive}; leg n's cluster sits at wps[n]
+    this.targetsDone = 0;
   }
 
   ramp(n) { return clamp((n - 1) / CFG.RAMP_LEGS, 0, 1); }
@@ -144,10 +146,35 @@ export class Level {
     this.sitesDone = n;
   }
 
+  // target cluster at the end of leg n (random: seeded weighted types on valid ground; fixed: CFG.TARGET_FIXED cycled per leg)
+  genTargets(n) {
+    const L = this.legs[n - 1], r = rng(this.seed * 49979687 + n * 86028121 + 3), p = L.p1, out = [];
+    const add = (type, x, z) => out.push({ key: `t${n}:${out.length}`, leg: n, type, x, z, alive: true });
+    if (CFG.TARGET_MODE === 'fixed') {
+      for (const e of CFG.TARGET_FIXED[(n - 1) % CFG.TARGET_FIXED.length]) add(e.type, p.x + e.dx, p.z + e.dz);
+    } else {
+      const types = Object.entries(CFG.TARGET_TYPES), total = types.reduce((a, [, T]) => a + T.weight, 0);
+      const count = Math.max(1, Math.round(lerp(CFG.TARGETS_LEG[0], CFG.TARGETS_LEG[1], this.ramp(n))));
+      for (let i = 0; i < count; i++) {
+        let w = r() * total, type = types[0][0]; for (const [k, T] of types) { if ((w -= T.weight) < 0) { type = k; break; } }
+        for (let tries = 0; tries < 60; tries++) {                       // widen the search when the ground is bad (lake, steep slope)
+          const a = r() * Math.PI * 2, rad = Math.sqrt(r()) * CFG.TARGET_CLUSTER_R * (1 + tries / 15), x = p.x + Math.cos(a) * rad, z = p.z + Math.sin(a) * rad;
+          if (terrainH(x, z) < CFG.WATER_Y + 1 || terrainSlope(x, z, 12) > 0.3) continue;
+          if (out.some((o) => Math.hypot(o.x - x, o.z - z) < CFG.TARGET_MIN_SEP)) continue;
+          add(type, x, z); break;
+        }
+      }
+      if (!out.length) add(types[0][0], p.x, p.z);                        // never an empty leg
+    }
+    this.targets.push(...out); this.targetsDone = n;
+  }
+
   // make sure everything needed while flying toward waypoint `n` exists (leg n-1..n+1)
   ensure(n) {
     this.ensureLegs(n + 2);
     while (this.sitesDone < n + 1) this.genSites(this.sitesDone + 1);
+    while (this.targetsDone < n + 1) this.genTargets(this.targetsDone + 1);
     this.sites = this.sites.filter((s) => s.leg >= n - 1);
+    this.targets = this.targets.filter((t) => t.leg >= n);
   }
 }

@@ -18,6 +18,7 @@ export const CFG = {
   ALT_RECOVER: 22,       // m/s climb back when flying healthy
   PLAYER_LENGTH: 28,     // meters on screen (model is normalized to this)
   AGL_MIN: 25, AGL_RANGE: 55,   // visual height above the terrain: AGL_MIN + AGL_RANGE * (alt / ALT_START)
+  ALT_TRUE_M: 1,         // true height above the ground (m) per unit of ALT: what bombs fall from (the jet is drawn much lower)
 
   // --- camera / light ---
   CLIMB_MAX: 0.5, DIVE_MAX: 0.38,   // max climb / dive angle (rad) while following terrain
@@ -60,6 +61,59 @@ export const CFG = {
   TREE_SPACING: 46, TREE_BOX: 720, TREE_MAX: 1500,
   TREE_SPARSE: 0.10,        // chance of a lone tree in non-forest cells
   TREES_PER_FOREST_CELL: 2,
+
+  // --- mission objective: bomb ground targets ('targets') or fly waypoints ('waypoints', kept for the SR-71 mission) ---
+  // Either way the level is built leg by leg; the cluster of targets sits where the leg's waypoint would be, inside its SAM ring.
+  OBJECTIVE: 'targets',
+  TARGET_MODE: 'random',    // 'random' = seeded per leg (same ?seed=N gives the same targets) | 'fixed' = TARGET_FIXED, cycled per leg
+  TARGETS_LEG: [2, 4],      // targets per leg (early .. late game)
+  TARGET_CLUSTER_R: 260, TARGET_MIN_SEP: 70,
+  TARGET_VISUAL_SCALE: 1.8,
+  TARGET_ACC_BONUS: 0.5,    // score x (1 + this * accuracy), accuracy 0..1 = how close the blast was to dead centre (set by weapons)
+  // Add a type here (+ a model in targets.js, optional): score, spawn weight, MFD letter, cls. Weapons list valid types by these keys.
+  // cls = protection class; each weapon's `effects` gives its kill / damage radius per class ('hard' = only a penetrator gets full effect).
+  TARGET_TYPES: {
+    bunker: { label: 'BUNKER', score: 150, weight: 3, sym: 'B', cls: 'hard' },
+    radar: { label: 'RADAR', score: 200, weight: 2, sym: 'R', cls: 'soft' },
+    tank: { label: 'TANK', score: 75, weight: 4, sym: 'T', cls: 'armor' },
+  },
+
+  // --- weapons (targets.js has the types they can hit; weapons.js flies them with the shared model in ballistics.js) ---
+  // mass (kg), diameter (m), cdMach: drag coefficient vs Mach [[mach, cd], ...], linear between points (one point = constant).
+  // guidance: null = ballistic | { type: 'laser', maxG: fin authority (g), gain: navigation gain on the predicted miss,
+  //   gimbal: rad between the jet's nose and the line of sight (3D) beyond which the designator loses the target }.
+  // effects: per target class, kill = destroyed if it lands within this (m), dmg = damaged within this; a damaged target dies to a second hit inside dmg.
+  // penetrator: full effect on 'hard'; a non-penetrator's hard radii are x hardFactor. blastFx = explosion size (visual only).
+  WEAPONS: {
+    gbu27: { name: 'GBU-27', mass: 984, diameter: 0.37, cdMach: [[0, 0.30]], guidance: { type: 'laser', maxG: 0.1, gain: 3, gimbal: 2.09 },
+      effects: { hard: { kill: 6, dmg: 15 }, armor: { kill: 12, dmg: 25 }, soft: { kill: 30, dmg: 45 } }, penetrator: true, hardFactor: 0.25,
+      validTargets: ['bunker', 'radar', 'tank'], blastFx: 1.5, model: 'gbu-27', length: 4.3 },
+  },
+  WEAPON_START: 'gbu27',
+  BAY_ROUNDS: 2, BAY_REFILL_PER_LEG: 1,   // real F-117 carries two
+  BAY_DOOR_TIME: 1.0,       // s for the doors to fully open (or shut); a bomb can only leave with them fully open
+  BAY_RCS_BOOST: 0.4,       // SAM detection range multiplier bonus while the doors are not fully shut
+  RELEASE_INTERVAL: 0.5,    // s between two releases
+  PICKLE_HOLD: 0.25,        // G tapped shorter than this = drop now (on key up); held longer = auto release when the cues meet
+  BOMB_VISUAL_SCALE: 3,
+
+  // --- bomb flight (ballistics.js). Earth curvature ignored (ranges are a few km). ---
+  GRAVITY: 9.80665,
+  BALLISTIC_DT: 1 / 60,     // fixed step for the bomb AND its predictions
+  BALLISTIC_MAX_T: 90,      // prediction gives up after this many s of flight
+  ISA_RHO0: 1.225, ISA_T0: 288.15, ISA_LAPSE: 0.0065,   // standard atmosphere: sea-level density, temperature (K), lapse rate (K/m)
+  WIND: [0, 0, 0],          // air velocity (m/s: east, up, south); 0 until we decide on a wind model
+  TARGET_FIXED: [           // per leg: type + offset (m, east / south) from the leg's end point
+    [{ type: 'bunker', dx: 0, dz: 0 }, { type: 'tank', dx: -90, dz: 60 }, { type: 'tank', dx: 80, dz: 70 }],
+    [{ type: 'radar', dx: 0, dz: 0 }, { type: 'bunker', dx: 110, dz: -40 }, { type: 'tank', dx: -100, dz: 50 }],
+  ],
+
+  // --- mission end + results (saved for the mission-select page, index.html) ---
+  MISSION_ID: 'f117',       // results go to localStorage 'jow:stats:<id>'
+  MISSION_LEGS: 5,          // strike mission: clearing (or skipping) this many target legs = MISSION COMPLETE. Waypoint mode stays endless.
+  // rank from points = score + RANK_TIME_BONUS per second under RANK_PAR_TIME; first entry whose minimum is reached, else 'D'
+  RANK_PAR_TIME: 300, RANK_TIME_BONUS: 2,
+  RANKS: [['S', 3200], ['A', 2500], ['B', 1800], ['C', 1000]],
 
   // --- waypoints / scoring ---
   LEVEL_SEED: 0,            // 0 = random per run (also settable with ?seed=N)
@@ -169,15 +223,45 @@ export const CFG = {
   CHAFF_DRAIN: 0.12,       // q per second lost with a saturated gate (even without beaming)
   CHAFF_NOTCH_BOOST: 1.5,   // notch drain multiplier with a saturated gate ("chaff in the notch")
 
+  // --- ribbon trails (trails.js). spacing = metres between recorded points, maxPoints = ring size (spacing * maxPoints = longest trail),
+  // life = s until fully faded, width = [at the head, fully aged] m, drift = sideways wander of old points (m), rise = m/s upward, scroll = noise texture speed,
+  // minAlt = no trail below this altitude (null = always), detectable + detectRange = sites within that many m of a live point can see it ---
+  TRAILS: {
+    jet: { spacing: 4, maxPoints: 140, life: 2.6, width: [1.2, 5.5], color: [0.95, 0.97, 1], colorEnd: [0.8, 0.83, 0.88], alpha: 0.34, noise: 0.5, scroll: 0.3, texLen: 40, drift: 3, rise: 0.5, fadePow: 1.3, headFade: 0.25, additive: false, minAlt: null, detectable: false },
+    missile: { spacing: 5, maxPoints: 200, life: 7, width: [2, 16], color: [0.93, 0.93, 0.95], colorEnd: [0.55, 0.55, 0.58], alpha: 0.62, noise: 0.6, scroll: 0.15, texLen: 60, drift: 6, rise: 1, fadePow: 1.2, headFade: 0.15, additive: false, minAlt: null, detectable: false },
+    flare: { spacing: 2.5, maxPoints: 60, life: 1.5, width: [1.5, 5], color: [1, 0.9, 0.6], colorEnd: [0.9, 0.35, 0.08], alpha: 0.9, noise: 0.3, scroll: 1.2, texLen: 15, drift: 1, rise: 0.5, fadePow: 1.6, headFade: 0.05, additive: true, minAlt: null, detectable: false },
+    vortex: { spacing: 3, maxPoints: 60, life: 1.2, width: [0.5, 2.5], color: [1, 1, 1], colorEnd: [0.85, 0.9, 0.95], alpha: 0.35, noise: 0.4, scroll: 0.5, texLen: 20, drift: 1, rise: 0, fadePow: 1.5, headFade: 0.1, additive: false, minAlt: null, detectable: false },   // for wingtips at high G (not wired yet)
+    // high-altitude jet contrail (SR-71): only exists above minAlt and gives the aircraft away to sites within detectRange
+    contrailHigh: { spacing: 8, maxPoints: 260, life: 9, width: [3, 22], color: [1, 1, 1], colorEnd: [0.85, 0.9, 0.95], alpha: 0.55, noise: 0.55, scroll: 0.1, texLen: 90, drift: 8, rise: 0, fadePow: 1.1, headFade: 0.4, additive: false, minAlt: 300, detectable: true, detectRange: 4000 },
+  },
+
   // --- visual effects ---
   FX_MAX_PARTICLES: 9000,
-  FX_CONTRAIL_RATE: 26,     // per second, light contrail when healthy
   FX_SMOKE_RATE: [10, 110], // per second, dark smoke at severity 0 -> 1 (stalled / low altitude)
   FX_FIRE_RATE: 40,         // per second at severity 1
-  FX_FLARE_TRAIL_RATE: 34,  // smoke puffs per second per flare
   FX_CHAFF_RATE: 45,        // sparkles per second per chaff cloud
   FX_DEBRIS_PIECES: 9,      // burning chunks when the jet is destroyed
   FX_DEBRIS_GRAVITY: 75,
+
+  // --- bombing reticle (hud.js). Every distance comes from the release prediction; these are only screen scales. ---
+  GUIDE_ALONG_FACTOR: 1.8,  // in-range envelope: cross-track limit = 0.5 * maxG * g * fall time^2, along-track limit = this x that (measured)
+  RETICLE_FPM_UP: 90,       // px the flight-path marker sits above screen centre (just ahead of the jet)
+  RETICLE_CUE_PX: 170,      // px of release-cue travel ...
+  RETICLE_CUE_TIME: 10,     // ... covering this many s to release
+  RETICLE_PX_PER_M: 1.2,    // steering line offset per m of cross-track miss
+
+  // --- UI look (hud.js, mfd.js via ui.js). f117.html :root mirrors the colours for the DOM parts. ---
+  // One palette: green = normal, amber = caution / weapons, red = threat, cyan = own jet / notch, gold = waypoints.
+  // Line tiers: hair = grids and dashed guides, thin = symbols and text boxes, bold = emphasis, heavy = progress arcs, cues, frames.
+  UI: {
+    font: 'ui-monospace, Consolas, monospace',     // every HUD / MFD text (score and warnings use Amarillo USAF, menus Rajdhani: see f117.html)
+    size: { s: 10, m: 13, l: 16, xl: 22 },        // px: MFD labels / HUD text / readouts / big numbers
+    green: '#58ff9a', amber: '#ffb020', red: '#ff3b30', cyan: '#39d0ff', gold: '#ffd23a', hot: '#fff0b0', grey: '#9a9a9a', ink: '#0a120c',
+    dimA: 0.35, faintA: 0.22, softA: 0.75,         // alphas for dimmed / grid / label versions of a colour
+    scope: 'rgba(4,14,10,0.88)',                   // MFD background (DOM panels use the same rgb at 0.6)
+    line: { hair: 1, thin: 1.4, bold: 2, heavy: 3 },
+    glow: 4,                                       // px phosphor glow on HUD / MFD lines and text (0 = off, cheaper)
+  },
 
   // --- MFD ---
   MFD_RANGES: [2000, 3500, 5500],

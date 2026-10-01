@@ -53,7 +53,7 @@ export class Missile {
     this.rig.position.set(this.x, this.y, this.z); this.rig.rotation.set(0, phi, 0);
     this.lineRig.position.set(this.x, terrainH(this.x, this.z) + 2, this.z); this.lineRig.rotation.set(0, phi, 0);
   }
-  dispose() { this.scene.remove(this.rig, this.lineRig); this.line.material.map.dispose(); this.line.material.dispose(); this.line.geometry.dispose(); }
+  dispose() { this.trail && this.trail.end(); this.scene.remove(this.rig, this.lineRig); this.line.material.map.dispose(); this.line.material.dispose(); this.line.geometry.dispose(); }
 
   get energy() { return clamp((this.speed - CFG.MSL_MIN_SPEED) / (CFG.MSL_SPEED_REF - CFG.MSL_MIN_SPEED), 0, 1); }
 
@@ -75,7 +75,7 @@ export class Missile {
     ctx.onNotch && ctx.onNotch(this);
   }
 
-  // ctx: {player, particles, flares, time, onNotch, onKill, onSeduced, onDecoyHit, onReacquire, onSpent}
+  // ctx: {player, particles, trails, flares, time, onNotch, onKill, onSeduced, onDecoyHit, onReacquire, onSpent}
   update(dt, ctx) {
     const { player, particles: fx } = ctx, flares = ctx.flares || [];
     this.age += dt;
@@ -160,7 +160,8 @@ export class Missile {
     this.syncMesh();
 
     // motor plume while burning; a coasting missile is dark and quiet
-    if (burning) fx.missileBurn(this.x, this.y, this.z, this.fx, this.fz, step);
+    if (burning) { fx.missileBurn(this.x, this.y, this.z, this.fx, this.fz); this.trail ??= ctx.trails.create('missile'); this.trail.update(this.x - this.fx * 4, this.y, this.z - this.fz * 4, this.y); }
+    else if (this.trail) { this.trail.end(); this.trail = null; }              // smoke stops with the motor and fades out on its own
 
     this.line.visible = this.mode !== 'lost' && (Math.floor(ctx.time * 8) % 2 === 0);
     this.lineRig.visible = this.mode !== 'lost';
