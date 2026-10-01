@@ -1,0 +1,17 @@
+newmtl 6adac757-ed70-43d4-bc2e-91bd69af70dc
+Kd 1.000 1.000 1.000
+Ks 0.502 0.502 0.502
+Ns 30
+Ke 0.000 0.000 0.000
+map_Kd textures/us_2000lb_gbu_27_c.jpg
+map_Ks textures/us_2000lb_gbu_27_n_s.jpg
+map_normal textures/us_2000lb_gbu_27_n_n.jpg
+map_ao textures/us_2000lb_gbu_27_n_ao.jpg
+
+newmtl e57d53b7-35c4-4109-90f0-8bf61c7401f1
+Kd 0.000 0.000 0.000
+Ks 1.000 1.000 1.000
+Ns 255
+Ke 0.000 0.000 0.000
+d 0.2
+

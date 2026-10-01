@@ -74,10 +74,10 @@ export class HUD {
     txt('CMD FLR/CHF', cx - 92, by + 2, low ? R : G, 'center'); txt(String(p.flares).padStart(2, '0'), cx + 10, by + 4, low && blink ? A : (low ? R : G), 'center', font('xl'));
     c.strokeStyle = low ? R : G; c.strokeRect(cx + 50, by - 8, 88, 10); c.fillStyle = low ? R : G; c.fillRect(cx + 50, by - 8, 88 * p.flares / CFG.FLARES_MAX, 10);
     c.strokeStyle = flags.bombs ? G : R; c.strokeRect(cx - 262, by - 20, 104, 34);
-    txt(flags.wpn, cx - 210, by - 5, flags.bombs ? G : R, 'center'); txt('BOMBS ' + flags.bombs, cx - 210, by + 10, flags.bombs ? G : R, 'center');
+    txt(flags.wpn, cx - 210, by - 5, flags.bombs ? G : R, 'center'); txt((flags.wpnLbl || 'BOMBS') + ' ' + flags.bombs, cx - 210, by + 10, flags.bombs ? G : R, 'center');
     if (flags.nvg) { c.strokeStyle = G; c.strokeRect(cx + 156, by - 20, 48, 34); txt('NVG', cx + 180, by + 3, G, 'center'); }
     // stealth state annunciators
-    const ann = [['RADAR', flags.track, A], ['LOCK', flags.lock, R], ['MSL', flags.msl, R], ['STALL', p.stalled, R], ['BAY', flags.bay, A]];
+    const ann = flags.ann || [['RADAR', flags.track, A], ['LOCK', flags.lock, R], ['MSL', flags.msl, R], ['STALL', p.stalled, R], ['BAY', flags.bay, A]];   // a mission may pass its own five
     ann.forEach(([t, on, col], i) => { const x = cx - 150 + i * 76; if (on && blink) { c.fillStyle = col; c.fillRect(x, by - 58, 70, 18); txt(t, x + 35, by - 45, U.ink, 'center'); } else { c.strokeStyle = on ? col : dim; c.strokeRect(x, by - 58, 70, 18); txt(t, x + 35, by - 45, on ? col : dim, 'center'); } });
 
     // ---- designated target marker (flags.mark): box + diamond on the target, or a caret at the screen edge pointing at it
@@ -117,6 +117,8 @@ export class HUD {
   }
   score(s, passed) { this.el.score.textContent = String(s).padStart(6, '0'); this.el.passed.textContent = passed; }
   gauges(p) {
+    const key = `${p.throttle.toFixed(2)}|${p.kt}|${p.stalled}|${p.v < CFG.V_STALL + 11}|${Math.round(p.alt)}|${p.flares}`;   // skip the DOM writes (style recalcs) when nothing visible changed
+    if (key === this._gk) return; this._gk = key;
     this.el.thr.style.height = (p.throttle * 100).toFixed(0) + '%';
     this.el.thrv.textContent = Math.round(p.throttle * 100) + '%';
     this.el.spd.textContent = p.kt;

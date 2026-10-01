@@ -69,6 +69,9 @@ export const CFG = {
   TARGETS_LEG: [2, 4],      // targets per leg (early .. late game)
   TARGET_CLUSTER_R: 260, TARGET_MIN_SEP: 70,
   TARGET_VISUAL_SCALE: 1.8,
+  // real models per target type (assets.js MODELS ids); each target picks one, fixed per position. Types not listed use procedural stand-ins.
+  TARGET_MODELS: { tank: ['t-72m1mod-finland', 't-90'], radar: ['p-18-radar'], bunker: ['bunker-calarreona'] },
+  REAL_VISUAL_SCALE: 1.4,   // real models use the jet's exaggeration (28 m / 20.1 m), so they're to scale against the F-117, not the generic 1.8
   TARGET_ACC_BONUS: 0.5,    // score x (1 + this * accuracy), accuracy 0..1 = how close the blast was to dead centre (set by weapons)
   // Add a type here (+ a model in targets.js, optional): score, spawn weight, MFD letter, cls. Weapons list valid types by these keys.
   // cls = protection class; each weapon's `effects` gives its kill / damage radius per class ('hard' = only a penetrator gets full effect).
@@ -95,7 +98,7 @@ export const CFG = {
   BAY_RCS_BOOST: 0.4,       // SAM detection range multiplier bonus while the doors are not fully shut
   RELEASE_INTERVAL: 0.5,    // s between two releases
   PICKLE_HOLD: 0.25,        // G tapped shorter than this = drop now (on key up); held longer = auto release when the cues meet
-  BOMB_VISUAL_SCALE: 3,
+  BOMB_VISUAL_SCALE: 28 / 20.1,   // same exaggeration as the jet (PLAYER_LENGTH 28 m vs the real F-117's 20.1 m): the 4.2 m GBU-27 draws ~5.9 m, true to scale against the jet
 
   // --- bomb flight (ballistics.js). Earth curvature ignored (ranges are a few km). ---
   GRAVITY: 9.80665,
@@ -263,6 +266,31 @@ export const CFG = {
     glow: 4,                                       // px phosphor glow on HUD / MFD lines and text (0 = off, cheaper)
   },
 
+  // --- difficulty (menu). Each preset overrides the values above when selected; NORMAL = the values as written.
+  // num = multiply the base value, [a, b] arrays are replaced. score = multiplier on every point earned.
+  DIFFICULTY_DEFAULT: 'normal',
+  DIFFICULTY: {
+    easy: { label: 'EASY', desc: 'Fewer, shorter-ranged SAMs, slow locks, easier notches, more flares and bombs.', score: 0.75,
+      mul: { SAM_RANGE: 0.85, LOCK_TIME: 1.6, FIRE_COOLDOWN: 1.4, NOTCH_TIME: 0.7, FLARE_HAZARD: 1.4, MSL_THRUST: 0.9 },
+      set: { SITES_LEG: [5, 8], LANE_MARGIN: [340, 200], MAX_MISSILES_INFLIGHT: 4, FLARES_START: 60, FLARES_MAX: 60, BAY_ROUNDS: 3, BAY_REFILL_PER_LEG: 2 } },
+    normal: { label: 'NORMAL', desc: 'The mission as designed.', score: 1, mul: {}, set: {} },
+    hard: { label: 'HARD', desc: 'Denser, longer-ranged SAMs, fast locks and salvos, stubborn seekers, fewer flares.', score: 1.35,
+      mul: { SAM_RANGE: 1.12, LOCK_TIME: 0.7, FIRE_COOLDOWN: 0.75, NOTCH_TIME: 1.3, FLARE_HAZARD: 0.8, MSL_THRUST: 1.08 },
+      set: { SITES_LEG: [9, 14], LANE_MARGIN: [170, 80], MAX_MISSILES_INFLIGHT: 9, FLARES_START: 28, FLARES_MAX: 30, BAY_ROUNDS: 2, BAY_REFILL_PER_LEG: 1 } },
+  },
+
   // --- MFD ---
   MFD_RANGES: [2000, 3500, 5500],
 };
+
+// Apply a difficulty preset to CFG (always starts from the base values, so switching back and forth is safe).
+const BASE = {};
+export function applyDifficulty(id) {
+  const d = CFG.DIFFICULTY[id] || CFG.DIFFICULTY[CFG.DIFFICULTY_DEFAULT];
+  for (const k of Object.keys(BASE)) CFG[k] = BASE[k];
+  const keep = (k) => { if (!(k in BASE)) BASE[k] = Array.isArray(CFG[k]) ? [...CFG[k]] : CFG[k]; };
+  for (const [k, m] of Object.entries(d.mul)) { keep(k); CFG[k] = Array.isArray(BASE[k]) ? BASE[k].map((v) => v * m) : BASE[k] * m; }
+  for (const [k, v] of Object.entries(d.set)) { keep(k); CFG[k] = Array.isArray(v) ? [...v] : v; }
+  CFG.SCORE_MULT = d.score;
+  return d;
+}

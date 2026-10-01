@@ -6,8 +6,8 @@ A pilot who can fly anything: stealth strike, fighters, bombers, interceptors, A
 plane combat game/
 ├── index.html              mission select (Jack of All Wings): list, holo map, saved rank / scores / times per mission
 ├── f117.html               the F-117 Stealth Run game (briefing screen, then the mission; Esc on menu/end screens = back to mission select)
-├── start-game.bat         double-click: starts the local server + opens the mission select
-├── start-viewer.bat       double-click: same server, opens the viewer (just opens the page if the server is already running)
+├── growler.html            the EA-18G Growler game (same shell as f117.html, loads src/growler/main.js)
+├── start.bat              double-click: starts the local server + opens the mission select (`start.bat /viewer/` opens the viewer)
 ├── server.py              local no-cache static server (`python server.py [port] [page]`)
 ├── viewer/                 standalone 3D model viewer
 │   └── index.html
@@ -15,8 +15,8 @@ plane combat game/
 ├── src/
 │   ├── core/               shared engine code: renderer, camera, input, asset loading
 │   ├── viewer/             viewer-only code
-│   └── game/               gameplay (config.js holds every tunable number; terrain.js height field, levelgen.js waypoints + SAM layout; audio.js sound engine)
-├── tests/                  scenario harness for headless testing (see Game section)
+│   ├── game/               gameplay (config.js holds every tunable number; terrain.js height field, levelgen.js waypoints + SAM layout; audio.js sound engine)
+│   └── growler/            Growler mission: config.js overrides game/config.js; IADS, ESM, jammer, AARGM, strike package, MFD
 ├── assets/
 │   ├── aircraft/
 │   │   └── <aircraft-name>/    one folder per aircraft, same layout each time:
@@ -36,11 +36,17 @@ Rules
 - Aircraft folder names: lowercase-with-dashes (`f-117-nighthawk`, `sr-71-blackbird`).
 - Original downloads go in `source/` and are never edited; work from `model/`.
 - Code never lives in `assets/`; assets never live in `src/`.
-- Run locally by double-clicking `start-game.bat` / `start-viewer.bat` (needs Python), or `python server.py` from this folder and open http://localhost:8000/ (game) or http://localhost:8000/viewer/ (viewer). Browsers block file:// module/asset loading.
+- Run locally by double-clicking `start.bat` (needs Python), or `python server.py` from this folder and open http://localhost:8000/ (game) or http://localhost:8000/viewer/ (viewer). Browsers block file:// module/asset loading.
 - To add a model: drop it in `assets/<category>/<name>/` and add an entry to `MODELS` in `src/core/assets.js`; it then shows up in the viewer dropdown, grouped by category (`viewer/?model=<name>` opens one directly).
 
 ## Mission 1: F-117 Stealth Run
-Controls: A/D or arrows = turn, W/S or up/down = throttle, **Space/F = flares + chaff (hold to keep dropping, ~3.6 bursts/s; 40 to start)**, **B = bomb bay doors, G = release, Tab = next target**, Q/E = MFD range, P = pause, R = restart, M = mute.
+Controls (defaults; every key is rebindable in **CONTROLS** on the start menu, saved to `localStorage['jow:keys']`, defined in `ACTIONS` in `src/game/input.js`): A/D or arrows = turn, W/S or up/down = throttle, Space/F = flares + chaff (hold), B = bay doors, G = release, Tab = next target, Q/E = MFD range, P = pause, R = restart, M = mute. Enter/Esc are fixed menu keys.
+
+**Difficulty** (start menu: EASY / NORMAL / HARD, saved in settings): presets in `CFG.DIFFICULTY` override SAM range, lock time, salvo rate, SAMs per leg, lane margin, notch time, flare effectiveness, missile thrust, flares and bombs; points are multiplied by the preset's `score` (0.75 / 1 / 1.35). `applyDifficulty()` in config.js always restarts from the base values.
+
+All ground targets use real models (`CFG.TARGET_MODELS`: tanks = T-72M1 Finnish / T-90, radar = P-18 "Spoon Rest D", bunker = Calarreona machine-gun bunker scan; each target picks one, fixed per position), drawn at `REAL_VISUAL_SCALE` 1.4 like the jet; a destroyed target leaves a charred copy of itself.
+
+GBU-27 is drawn at the jet's own exaggeration (`BOMB_VISUAL_SCALE` = 28/20.1), so it's true to scale against the F-117.
 
 **Bombing (GBU-27).** Two in the internal bay (+1 per cleared leg). B opens/closes the doors (~1 s; SAM detection range +40% while not fully shut), G drops a bomb once they are fully open (tap = now, hold = automatic release when the cues meet), Tab picks the designated target (default: nearest). The bomb falls from the jet's ALT (ALT 600 = 600 m, `ALT_TRUE_M`) with its speed and vertical rate, under gravity and drag (mass, diameter, Cd-vs-Mach table, standard atmosphere, `WIND` hook = 0); on screen that fall is squeezed into the jet's low visual height. The laser steers it toward the designated target with limited fin authority (fixes roughly 100 m long/short or 55 m sideways) as long as the target stays within 120 deg of the jet's nose (3D) and the jet is alive; otherwise it falls ballistic. `src/game/ballistics.js` is the one flight model used by both the bomb and every impact prediction. Effects per target class (`WEAPONS.*.effects`): bunker (hard) killed within 6 m / damaged within 15 m, tank (armor) 12 / 25 m, radar (soft) 30 / 45 m; a damaged target dies to a second hit inside its damage radius.
 
@@ -64,9 +70,27 @@ Below stall speed you sink and lose control; hitting 0 altitude is a crash. Hard
 
 Tune anything in `src/game/config.js` (every number lives there). Score font: `assets/ui/fonts/amarurgt.ttf` (Amarillo USAF).
 
-**Tests.** `tests/harness.js` drives `window.__game` (`step(dt)`, `input`, `spawnMissile`, ...) with a seeded RNG. With the game open: `const T = (await import('/tests/harness.js')).install();` then `T.trials(name, policy, n)` / `T.run(...)`.
 
 
 **Polish pass.** Procedural audio (engine follows throttle, wind, panned/doppler missile rumble, flare hiss, launch and explosion sounds; `M` mute, `+`/`-` volume, saved). Lakes in low basins, drifting cloud shadows, detailed SAM sites (camo nets, sandbags, trucks, sweeping radar that lights up when tracking). Gamepad: stick = turn/throttle, A/RT = flares, Start = pause, X = restart. Death screen shows flight time, clean legs, missiles beaten, flares used.
 
 **Night, radio, loading.** The menu lets you pick DAY or NIGHT (`T` also switches). Night is moonlit and dark; night-vision goggles (`N` toggles) render a green phosphor view with grain and bloom, and flares light the ground. Background radio chatter (`V` toggles) plays pre-rendered voice clips from `assets/audio/radio/` (AWACS, tanker and other flights using NATO phonetics and brevity words) with on-screen captions; reactive calls cover waypoints, radar lock, missile launch, defeated missiles, stalls and low flares. The level, batteries and shaders are built and warmed while the menu / death screen is up, so starting a run does not hitch. Batteries far from the camera use a cheap stand-in model.
+
+## Mission 2: EA-18G Growler
+`growler.html` (mission select: EA-18G Growler). Design notes: `docs/ea-18g-growler.md`. Every Growler number lives in `src/growler/config.js`, which is imported first and overrides `src/game/config.js` for this page only (the F-117 is untouched).
+Reused from the F-117: world/terrain, flight model (`CFG.PLAYER_MODEL` picks the model), PAC-3 missile with the notch / decoy model, flares + chaff, HUD canvas, audio, radio, NVG, difficulty, results. Models: `ea-18g-growler`, `fa-18e-super-hornet` (escorts, same source .blend), `agm-88-harm` (AARGM), plus the Patriot, P-18 and the strike targets.
+
+Controls (rebindable, shared `jow:keys`): J = jammer on/off, Z / C = steer the jam cone, X = slave the cone to the designated emitter, G = fire AARGM, Tab = next emitter, K = push the package early. Everything else as in the F-117 (no bomb bay).
+
+**Phase 1 - hunt** (`PHASE1_TIME`, 3:30 on NORMAL). Sites are invisible until they transmit. A transmitting site inside your receiver range (`EW_ESM` / `PAT_ESM` / `MOB_ESM`) draws a strobe (bearing line) on the MFD. Flying across the line of sight narrows its ellipse (`FIX_SPREAD` of bearing change seen from the site = full fix; straight at it takes `FIX_TIME`). Tab designates, G fires.
+- EW radar (P-18): always on, long range, cues every SAM within `EW_CUE_R`: a cued SAM goes active and locks faster. Kill it first and the SAMs only see you in their own short search bursts.
+- Patriot: long range, mostly static. When your AARGM comes within `ARM_DETECT` it may shut down, or stay up and fire PAC-3s at the AARGM (`PAT_INTERCEPT_*`).
+- Mobile SAM (smaller Patriot battery): short range, usually goes dark and drives off (`MOB_RELOCATE_P`), leaving your fix stale.
+- AARGM: homes on emissions; if the site goes dark it flies to the last aim point and the terminal seeker finds the site only if it is still within `ARM_MMW_RADIUS`. Fired at a fix = kills a site that shut down. Fired at a poor estimate = only works while it keeps transmitting.
+
+**Phase 2 - escort.** Four F/A-18Es fly the dashed route to the target cluster; every SAM still alive engages them (and you). A shot that reaches a Hornet kills it with `PKG_PK`. They bomb the targets (+ the targets' score), egress, and the mission completes: +`PKG_SCORE` per Hornet still flying. All four lost before the target = PACKAGE LOST.
+
+**Jammer.** One cone (`JAM_HALF_ANGLE`, `JAM_RANGE`) slaved to the designated emitter or steered by hand. A radar inside it only sees out to `JAM_FACTOR` x its range (burn-through): this protects you and the package. The pods heat up (`JAM_HEAT_TIME`, overheat = off until `JAM_RESTART`). A jammed Patriot can fire home-on-jam at you (`HOJ_*`): it can't be notched or decoyed while you jam; switch the jammer off and it loses guidance unless the site itself has you locked.
+
+Results go to `jow:stats:ea18g` like the F-117's. Test hooks: `window.__game` (state, sites, arms, pkg, jam, startEscort, fireArm, siteKilled), `window.__freeze` (stops the frame loop's step), `window.__god` (no death).
+

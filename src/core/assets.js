@@ -34,6 +34,35 @@ export const MODELS = {
       '02___Default': 'textures/MIM-104_TRACTOR_D.png',
     },
   },
+  't-72m1mod-finland': {
+    label: 'T-72M1 (Finnish)',
+    dir: 'ground/t-72m1mod-finland/',
+    type: 'glb',
+    file: 'model/t-72m1mod.glb',   // converted from source/t-72m1mod_finn.zip (FBX, mm) to meters; 9.9 m long with gun, nose toward +X
+    scale: 1,
+  },
+  't-90': {
+    label: 'T-90',
+    dir: 'ground/t-90/',
+    type: 'glb',
+    file: 'model/t-90.glb',        // converted from source/t90.fbx, scaled to 9.63 m with gun, decimated 912k -> 29k verts; nose toward +X
+    scale: 1,
+  },
+  'p-18-radar': {
+    label: 'P-18 "Spoon Rest D" radar',
+    dir: 'ground/p-18-radar/',
+    type: 'glb',
+    file: 'model/p-18.glb',        // converted from source/ (FBX + PBR maps, maps downscaled to 1024), decimated 71k -> 8k verts; cab toward +X
+    scale: 1,
+  },
+  'bunker-calarreona': {
+    label: 'Machine-gun bunker (Calarreona, photogrammetry)',
+    dir: 'ground/bunker-calarreona/',
+    type: 'glb',
+    file: 'model/bunker-calarreona.glb',   // 3D scan: texture baked to vertex colours, decimated 455k -> 18k verts, Z-up -> Y-up
+    scale: 1,
+    ground: 1.45,                  // m above the bottom of the model where the surrounding ground is (the scan includes the interior below it)
+  },
   'pac-3-mse': {
     label: 'PAC-3 MSE missile',
     dir: 'weapons/pac-3-mse/',
@@ -49,6 +78,27 @@ export const MODELS = {
     mtl: 'model/us_2000lb_gbu_27.mtl',   // only used for material names
     scale: 1,                            // already in meters (4.2 m long)
     diffuse: { '6adac757-ed70-43d4-bc2e-91bd69af70dc': 'model/textures/us_2000lb_gbu_27_c.jpg' },
+  },
+  'ea-18g-growler': {
+    label: 'EA-18G Growler',
+    dir: 'aircraft/ea-18g-growler/',
+    type: 'glb',
+    file: 'model/ea-18g-growler.glb',   // built from source/ (.blend): airframe with pods + glass + cockpit; 18.3 m, nose toward +X
+    scale: 1,
+  },
+  'fa-18e-super-hornet': {
+    label: 'F/A-18E Super Hornet',
+    dir: 'aircraft/fa-18e-super-hornet/',
+    type: 'glb',
+    file: 'model/fa-18e-super-hornet.glb',   // same source as the Growler, strike (bomb) configuration; nose toward +X
+    scale: 1,
+  },
+  'agm-88-harm': {
+    label: 'AGM-88 HARM / AARGM',
+    dir: 'weapons/agm-88-harm/',
+    type: 'glb',
+    file: 'model/agm-88.glb',      // 1:10 3MF print model scaled to 4.17 m, nose toward +X
+    scale: 1,
   },
 };
 
@@ -126,6 +176,7 @@ export async function loadModel(id, { onProgress, renderer, lowRes = false } = {
   const mats = new Set();
   root.traverse((o) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => mats.add(m)); });
   holder.userData.size = box.getSize(new THREE.Vector3());
+  holder.userData.ground = (cfg.ground || 0) * cfg.scale;   // ground contact height above the model's bottom (default: the bottom)
   holder.userData.materials = [...mats];
   return holder;
 }

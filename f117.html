@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>F-117 Stealth Run</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Amarillo USAF (amarurgt.ttf). It lacks some punctuation (: + % , ( ) /), which falls back to the next font in the stack. */
+  @font-face { font-family: 'AmarilloUSAF'; src: url('assets/ui/fonts/amarurgt.ttf') format('truetype'); }
+  :root { --score-font: 'AmarilloUSAF', 'Arial Narrow', Impact, sans-serif; --menu-font: 'Rajdhani', 'Eurostile', 'Bank Gothic', 'Segoe UI', Arial, sans-serif;   /* menus / titles, as on the mission select */ --hud: #58ff9a; --amber: #ffb020; --red: #ff3b30; --cyan: #39d0ff; --gold: #ffd23a;
+    /* same palette as CFG.UI (hud.js / mfd.js): panel = dark green glass, edge = dimmed green, glow = phosphor glow in the element's own colour */
+    --panel: rgba(4,14,10,.6); --edge: rgba(88,255,154,.35); --glow: 0 0 4px currentColor, 0 1px 3px #000; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #dfe9e2; font: 14px ui-monospace, Consolas, monospace; user-select: none; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #score { position: fixed; top: 16px; left: 22px; font-family: var(--score-font); color: #f4f7ee; text-shadow: 0 2px 0 #0a1a2a, 0 0 12px rgba(0,0,0,.6); letter-spacing: 3px; line-height: 1; }
+  #score .lbl { font-size: 15px; letter-spacing: 6px; opacity: .85; }
+  #score #score-val { display: block; font-size: 58px; margin-top: 4px; }
+  #score .sub { font-size: 15px; letter-spacing: 3px; margin-top: 8px; opacity: .85; }
+
+  #mfd { position: fixed; top: 16px; right: 16px; border-radius: 8px; box-shadow: 0 0 0 2px #050a07, 0 6px 24px rgba(0,0,0,.55); }
+
+  #cap { position: fixed; left: 22px; bottom: 26px; max-width: 440px; font-size: 14px; line-height: 1.35; color: var(--hud); text-shadow: var(--glow); background: var(--panel); border-left: 3px solid var(--hud); padding: 6px 10px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #cap b { color: #ffd23a; letter-spacing: 1px; margin-right: 6px; }
+  .opts { margin: 10px 0 4px; display: flex; gap: 10px; align-items: center; justify-content: center; } .opts .lbl { letter-spacing: 3px; font-size: 12px; opacity: .8; margin-right: 6px; }
+  .opt { font: inherit; letter-spacing: 3px; padding: 8px 18px; background: var(--panel); color: #9fb3a8; border: 1px solid var(--edge); cursor: pointer; } .opt:hover { color: #fff; } .opt.sel { color: #0a120c; background: var(--hud); border-color: var(--hud); }
+  #hudc { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+  #mfd { border-radius: 2px !important; border: 3px solid #1a1e1c; box-shadow: 0 0 0 2px #050807, inset 0 0 20px rgba(0,0,0,.6), 0 6px 24px rgba(0,0,0,.55) !important; }
+  #seeker, .toast, #wpt svg { border-radius: 2px !important; }
+  #hud { position: fixed; left: 22px; bottom: 22px; display: flex; gap: 16px; align-items: flex-end; background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 12px 16px; color: var(--hud); }
+  #thr { width: 26px; height: 110px; border: 1.5px solid var(--hud); position: relative; }
+  #thr-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--hud); opacity: .8; height: 35%; }
+  #thr-lbl { text-align: center; font-size: 11px; margin-top: 4px; }
+  #gauges { display: grid; grid-template-columns: auto auto; gap: 4px 12px; font-size: 13px; }
+  #gauges span.k { opacity: .7; } #gauges span.v { text-align: right; font-size: 18px; min-width: 60px; }
+  .bad { color: var(--red); }
+
+  #warn { position: fixed; top: 22%; left: 0; right: 0; text-align: center; pointer-events: none; font-family: var(--score-font); font-size: 30px; letter-spacing: 4px; text-shadow: var(--glow); }
+  #warn .red { color: var(--red); } #warn .amber { color: var(--amber); }
+  .blink { animation: blink .5s steps(2, jump-none) infinite; }
+  @keyframes blink { 0% { opacity: 1; } 50% { opacity: .15; } }
+  #seeker { display: none; position: fixed; top: calc(22% + 92px); left: 50%; transform: translateX(-50%); text-align: center; font-size: 13px; letter-spacing: 2px; color: var(--red); background: var(--panel); padding: 6px 14px; border-radius: 6px; text-shadow: var(--glow); }
+  #seeker.notch { color: var(--cyan); } #seeker.good { color: var(--hud); } #seeker.warn { color: var(--amber); } #seeker.dim { color: #9fb3a8; }
+  #sk-bar { width: 260px; height: 9px; border: 1px solid currentColor; margin: 5px auto 4px; } #sk-fill { height: 100%; background: currentColor; width: 0; }
+  #sk-line { font-size: 12px; letter-spacing: 1px; opacity: .9; }
+  #wpt { position: fixed; top: 158px; left: 22px; display: flex; align-items: center; gap: 12px; color: var(--gold); text-shadow: var(--glow); } #wpt.tgt { color: var(--amber); }   /* waypoints gold, strike targets amber (as on the MFD / reticle) */
+  #wpt svg { width: 46px; height: 46px; background: var(--panel); border: 1px solid currentColor; border-radius: 50%; }
+  #wpt-arrow { transform-origin: 50% 50%; } #wpt-txt { font-size: 22px; letter-spacing: 2px; } #wpt-sub { font-size: 12px; letter-spacing: 2px; opacity: .85; }
+  #flare-box { grid-column: 1 / -1; margin-top: 6px; border-top: 1px solid var(--edge); padding-top: 6px; display: flex; align-items: center; gap: 10px; }
+  #flare-box .n { font-size: 30px; line-height: 1; min-width: 46px; text-align: right; } #flare-box .k { font-size: 12px; opacity: .8; letter-spacing: 2px; }
+  #flare-track { flex: 1; min-width: 70px; height: 10px; border: 1px solid currentColor; } #flare-bar { height: 100%; background: currentColor; width: 100%; }
+
+  #toasts { position: fixed; top: 42%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  .toast { font-size: 16px; letter-spacing: 2px; padding: 6px 16px; background: var(--panel); border: 1px solid var(--hud); color: var(--hud); border-radius: 4px; text-shadow: var(--glow); animation: fade 2.6s forwards; }
+  .toast.bad { color: var(--red); border-color: var(--red); } .toast.good { color: var(--hud); } .toast.warn { color: var(--amber); border-color: var(--amber); }
+  @keyframes fade { 0%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-14px); } }
+
+  #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(2,8,6,.78); text-align: center; padding: 20px; }
+  #overlay { font: 500 17px var(--menu-font); letter-spacing: .03em; }
+  #ov-title { font-family: var(--menu-font); font-weight: 600; font-size: 54px; letter-spacing: .08em; margin: 0 0 12px; color: #f4f7ee; text-shadow: 0 0 10px rgba(88,255,154,.45); }
+  #ov-body { max-width: 600px; line-height: 1.45; color: #cfe0d6; } #ov-body b { color: #fff; font-weight: 600; } .hint { opacity: .8; font-size: 15px; }
+  #ov-body .rank { font-size: 26px; letter-spacing: .12em; color: var(--hud); margin-bottom: 8px; } #ov-body .rank b { font-size: 46px; color: var(--hud); text-shadow: var(--glow); }
+  table.keys { margin: 12px auto; border-collapse: collapse; text-align: left; } table.keys td { padding: 3px 12px; }
+  /* start menu: brief, two option rows, START / CONTROLS */
+  #ov-body .brief { max-width: 520px; margin: 0 auto 14px; color: #cfe0d6; }
+  #ov-body .opts { margin: 8px 0; } #ov-body .opts .lbl { display: inline-block; min-width: 110px; text-align: right; }
+  #ov-body .dsc { min-height: 1.4em; margin: 4px 0 0; font-size: 14px; }
+  .menu-btns { display: flex; gap: 14px; justify-content: center; margin: 22px 0 10px; }
+  .mbtn { font: 600 18px var(--menu-font); letter-spacing: .2em; padding: 10px 30px; background: var(--panel); color: var(--hud); border: 1px solid var(--edge); cursor: pointer; }
+  .mbtn:hover { border-color: var(--hud); color: #fff; box-shadow: 0 0 10px rgba(88,255,154,.3); }
+  .mbtn.go { background: var(--hud); color: #0a120c; border-color: var(--hud); } .mbtn.go:hover { color: #0a120c; filter: brightness(1.12); }
+  #ov-body .foot { margin-top: 6px; font-size: 13px; opacity: .6; }
+  /* controls (rebinding) menu */
+  .kwrap { display: flex; flex-wrap: wrap; gap: 8px 36px; justify-content: center; max-height: 62vh; overflow-y: auto; margin: 4px auto 8px; padding: 0 6px; }
+  #ov-body:has(.kwrap) { max-width: 980px; }
+  body.inmenu #score, body.inmenu #wpt, body.inmenu #mfd { display: none; }
+  table.rebind { border-collapse: collapse; align-self: flex-start; text-align: left; font-size: 15px; }
+  table.rebind th { font-size: 12px; letter-spacing: .2em; opacity: .6; font-weight: 500; padding: 0 6px 6px; text-align: center; }
+  table.rebind td { padding: 3px 6px; } table.rebind td:first-child { padding-right: 22px; color: #cfe0d6; }
+  .kslot { font: 600 14px var(--menu-font); letter-spacing: .06em; min-width: 92px; padding: 5px 10px; background: var(--panel); color: #fff; border: 1px solid var(--edge); cursor: pointer; }
+  .kslot:hover { border-color: var(--hud); } .kslot.empty { color: #5d6d64; }
+  .kslot.wait { color: #0a120c; background: var(--amber); border-color: var(--amber); animation: blink .6s steps(2, jump-none) infinite; }
+  .knote { min-height: 1.4em; color: var(--hud); }
+</style>
+<script>
+  // Cache-buster: every load fetches the game's own modules with a fresh ?v= stamp, so an edited file can never be paired with a stale cached one
+  // (that gave "Unknown model" errors). Modules import each other by plain relative paths, so the import map re-points each of them.
+  // A NEW file under src/ must be added to this list to be busted too.
+  window.__v = Date.now();
+  const base = new URL('./', location.href).href, imports = { three: './vendor/three/three.module.min.js' };
+  for (const f of ['core/assets', 'game/audio', 'game/ballistics', 'game/config', 'game/hud', 'game/input', 'game/levelgen', 'game/main', 'game/mfd', 'game/missile', 'game/nvg', 'game/particles', 'game/player', 'game/radio', 'game/sam', 'game/targets', 'game/terrain', 'game/trails', 'game/ui', 'game/weapons', 'game/world'])
+    imports[`${base}src/${f}.js`] = `${base}src/${f}.js?v=${window.__v}`;
+  const map = document.createElement('script'); map.type = 'importmap'; map.textContent = JSON.stringify({ imports }); document.head.appendChild(map);
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="score">
+  <div class="lbl">SCORE</div>
+  <span id="score-val">000000</span>
+  <div class="sub"><span id="passed-lbl">TARGETS</span> <span id="passed-val">0</span></div>
+</div>
+<div id="wpt">
+  <svg viewBox="-23 -23 46 46"><g id="wpt-arrow"><path d="M0 -17 L9 10 L0 5 L-9 10 Z" fill="currentColor" stroke="#0a120c" stroke-width="1.5"/></g></svg>
+  <div><div id="wpt-txt">--</div><div id="wpt-sub">TGT</div></div>
+</div>
+
+<canvas id="mfd"></canvas>
+
+<div id="warn"></div>
+<div id="seeker"><div id="sk-title">SEEKER</div><div id="sk-bar"><div id="sk-fill"></div></div><div id="sk-line"></div></div>
+<div id="toasts"></div>
+<div id="cap"></div>
+
+<canvas id="hudc"></canvas>
+<div id="hud" style="display:none">
+  <div><div id="thr"><div id="thr-fill"></div></div><div id="thr-lbl">THR <span id="thr-val">35%</span></div></div>
+  <div id="gauges">
+    <span class="k">SPD KT</span><span class="v" id="spd">0</span>
+    <span class="k">ALT</span><span class="v" id="alt">0</span>
+    <div id="flare-box"><span class="k">FLARES</span><span class="n" id="flares">0</span><div id="flare-track"><div id="flare-bar"></div></div></div>
+  </div>
+</div>
+
+<div id="overlay"><h1 id="ov-title">LOADING</h1><div id="ov-body"></div></div>
+<script type="module">import(`./src/game/main.js?v=${window.__v}`);</script>
+</body>
+</html>

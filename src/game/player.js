@@ -1,4 +1,4 @@
-// The F-117: flight model (speed, throttle, stall, altitude) and its visuals.
+// The player's jet (F-117 by default, CFG.PLAYER_MODEL picks another): flight model (speed, throttle, stall, altitude) and its visuals.
 import * as THREE from 'three';
 import { CFG } from './config.js';
 import { loadModel } from '../core/assets.js';
@@ -23,7 +23,7 @@ export class Player {
   }
 
   async load() {
-    const m = await loadModel('f-117-nighthawk', { renderer: this.renderer, lowRes: true, onProgress: this.onProgress });
+    const m = await loadModel(CFG.PLAYER_MODEL || 'f-117-nighthawk', { renderer: this.renderer, lowRes: true, onProgress: this.onProgress });
     const k = CFG.PLAYER_LENGTH / m.userData.size.x;
     m.scale.setScalar(k);
     this.tilt.add(m);
